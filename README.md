@@ -20,6 +20,6 @@ Just run `make`, it will download some assets and compiles application.
 
 #### Check fmri
 
-You can check fmri with `./oi-pkg-checker SUNWIPython /tmp/oi-userland/components>` to see what packages need
+You can check fmri with `./oi-pkg-checker SUNWIPython /tmp/oi-userland/components` to see what packages need
 that fmri.
 
