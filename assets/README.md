@@ -1,6 +1,6 @@
 # catalog & encumbered catalog
 
-downloaded from https://repology.org/repositories/updates
+download from https://repology.org/repositories/updates
 
 # oi-userland repo
 
