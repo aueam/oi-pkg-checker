@@ -1,0 +1,12 @@
+/target
+Cargo.lock
+
+assets/catalog.dependency.C
+assets/catalog.encumbered.dependency.C
+
+.idea
+
+data.bin
+problems.bin
+data.bin
+problems.bin

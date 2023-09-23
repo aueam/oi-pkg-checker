@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+	"oi-pkg-checker",
+	"oi-pkg-checker-core"
+]
