@@ -298,7 +298,11 @@ impl RenamedNeedsRenamedList {
         }
 
         for error in self.get_ref() {
-            error!("renamed package {} needs renamed package {}", error.get_package_ref(), error.get_needed_package_ref())
+            error!(
+                "renamed package {} needs renamed package {}",
+                error.get_package_ref().get_package_name_as_ref_string(),
+                error.get_needed_package_ref().get_package_name_as_ref_string()
+            )
         }
     }
 }
