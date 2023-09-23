@@ -10,7 +10,7 @@ repository = "https://github.com/aueam/oi-pkg-checker"
 keywords = ["lib", "pkg", "oi"]
 
 [dependencies]
-oi-pkg-checker-core = { path = "../oi-pkg-checker-core" }
+oi-pkg-checker-core = "0.1.0"
 fmri = "0.2.1"
 clap = { version = "4.3", features = ["derive"] }
 log = "0.4"
