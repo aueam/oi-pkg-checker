@@ -216,13 +216,18 @@ impl ComponentPackagesList {
     }
 
     fn get_dependencies_of_component(&self, component_path: PathBuf, dependencies_type: &DependencyTypes) -> Result<FMRIList, UnRunnableMakeCommand> {
-        let make_command = match dependencies_type {
-            DependencyTypes::Build => "gmake print-value-REQUIRED_PACKAGES",
-            DependencyTypes::Test => "gmake print-value-TEST_REQUIRED_PACKAGES",
-            DependencyTypes::SystemBuild => "gmake print-value-USERLAND_REQUIRED_PACKAGES",
-            DependencyTypes::SystemTest => "gmake print-value-USERLAND_TEST_REQUIRED_PACKAGES",
+        let mut make_command: String = "gmake ".to_owned();
+
+        #[cfg(target_os = "linux")]
+        make_command.push_str("GSED=/usr/bin/sed ");
+
+        make_command.push_str(match dependencies_type {
+            DependencyTypes::Build => "print-value-REQUIRED_PACKAGES",
+            DependencyTypes::Test => "print-value-TEST_REQUIRED_PACKAGES",
+            DependencyTypes::SystemBuild => "print-value-USERLAND_REQUIRED_PACKAGES",
+            DependencyTypes::SystemTest => "print-value-USERLAND_TEST_REQUIRED_PACKAGES",
             _ => panic!()
-        };
+        });
 
         let command = Command::new("sh")
             .arg("-c")
