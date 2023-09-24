@@ -217,10 +217,10 @@ impl ComponentPackagesList {
 
     fn get_dependencies_of_component(&self, component_path: PathBuf, dependencies_type: &DependencyTypes) -> Result<FMRIList, UnRunnableMakeCommand> {
         let make_command = match dependencies_type {
-            DependencyTypes::Build => "make print-value-REQUIRED_PACKAGES",
-            DependencyTypes::Test => "make print-value-TEST_REQUIRED_PACKAGES",
-            DependencyTypes::SystemBuild => "make print-value-USERLAND_REQUIRED_PACKAGES",
-            DependencyTypes::SystemTest => "make print-value-USERLAND_TEST_REQUIRED_PACKAGES",
+            DependencyTypes::Build => "gmake print-value-REQUIRED_PACKAGES",
+            DependencyTypes::Test => "gmake print-value-TEST_REQUIRED_PACKAGES",
+            DependencyTypes::SystemBuild => "gmake print-value-USERLAND_REQUIRED_PACKAGES",
+            DependencyTypes::SystemTest => "gmake print-value-USERLAND_TEST_REQUIRED_PACKAGES",
             _ => panic!()
         };
 
