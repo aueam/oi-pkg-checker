@@ -34,15 +34,11 @@ impl ComponentPackagesList {
     pub fn new(oi_userland_components: &PathBuf, oi_userland_components_encumbered: &PathBuf) -> Self {
         let components_path = oi_userland_components.to_string_lossy();
 
-        let output = Command::new("sh")
+        Command::new("sh")
             .arg("-c")
-            .arg(format!("cd {} && rm -f components.mk ; make components.mk", components_path))
-            .output()
+            .arg(format!("cd {} && rm -f components.mk ; gmake components.mk", components_path))
+            .spawn()
             .expect("failed to run command");
-        let e_o = vec![71, 101, 110, 101, 114, 97, 116, 105, 110, 103, 32, 99, 111, 109, 112, 111, 110, 101, 110, 116, 32, 108, 105, 115, 116, 46, 46, 46, 10, 109, 97, 107, 101, 58, 32, 78, 111, 116, 104, 105, 110, 103, 32, 116, 111, 32, 98, 101, 32, 100, 111, 110, 101, 32, 102, 111, 114, 32, 39, 99, 111, 109, 112, 111, 110, 101, 110, 116, 115, 46, 109, 107, 39, 46, 10];
-        if output.stdout != e_o {
-            panic!("output of cd oi_userland_components && rm -f components.mk ; make components.mk is not\n{}\nbut:\n{}", String::from_utf8(e_o).unwrap(), String::from_utf8(output.stdout).unwrap())
-        }
 
         let output = Command::new("cat")
             .arg(format!("{}/components.mk", components_path.clone()))
@@ -105,15 +101,11 @@ impl ComponentPackagesList {
         }
 
         let components_path_encumbered = oi_userland_components_encumbered.to_string_lossy();
-        let output = Command::new("sh")
+        Command::new("sh")
             .arg("-c")
-            .arg(format!("cd {} && rm -f components.mk ; make components.mk", components_path_encumbered))
-            .output()
+            .arg(format!("cd {} && rm -f components.mk ; gmake components.mk", components_path_encumbered))
+            .spawn()
             .expect("failed to run command");
-        let e_o = vec![71, 101, 110, 101, 114, 97, 116, 105, 110, 103, 32, 99, 111, 109, 112, 111, 110, 101, 110, 116, 32, 108, 105, 115, 116, 46, 46, 46, 10, 109, 97, 107, 101, 58, 32, 78, 111, 116, 104, 105, 110, 103, 32, 116, 111, 32, 98, 101, 32, 100, 111, 110, 101, 32, 102, 111, 114, 32, 39, 99, 111, 109, 112, 111, 110, 101, 110, 116, 115, 46, 109, 107, 39, 46, 10];
-        if output.stdout != e_o {
-            panic!("output of cd oi_userland_components && rm -f components.mk ; make components.mk is not\n{}\nbut:\n{}", String::from_utf8(e_o).unwrap(), String::from_utf8(output.stdout).unwrap())
-        }
 
         let output = Command::new("cat")
             .arg(format!("{}/components.mk", components_path_encumbered.clone()))
