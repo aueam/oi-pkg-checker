@@ -108,7 +108,7 @@ fn main() {
                         }
                     }
 
-                    let components_path = PathBuf::from(format!("{:?}/components", repo_path));
+                    let components_path = PathBuf::from(format!("{}/components", repo_path.to_string_lossy()));
 
                     let component_packages_list = ComponentPackagesList::new(
                         &components_path.clone(),
@@ -155,7 +155,7 @@ fn main() {
                                     exit(0);
                                 }
                                 DataCommands::Run {
-                                    catalogs
+                                    catalog
                                     , repo_path
                                     , debug
                                 } => {
@@ -172,13 +172,14 @@ fn main() {
 
                                     let mut components = Components::new();
 
-                                    let components_path = PathBuf::from(format!("{:?}/components", repo_path));
+                                    let components_path = PathBuf::from(format!("{}/components", repo_path.to_string_lossy()));
 
                                     let catalog_path = &components_path.clone();
+
                                     let encumbered_catalog_path = &PathBuf::from((components_path.to_string_lossy() + "/encumbered").to_string());
 
                                     match components.load(Assets::Catalogs(
-                                        catalogs.clone()), catalog_path, encumbered_catalog_path) {
+                                        catalog.clone()), catalog_path, encumbered_catalog_path) {
                                         Ok(_) => {}
                                         Err(problem) => match problem {
                                             Ok(problems) => renamed_package_in_component_list += problems,

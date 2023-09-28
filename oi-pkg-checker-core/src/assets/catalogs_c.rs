@@ -219,7 +219,7 @@ fn parse_action(action: String) -> Results {
 
 pub fn open_json_file(source_path: PathBuf) -> Value {
     if !source_path.is_absolute() {
-        error!("path isn't absolute");
+        error!("path {:?} isn't absolute", source_path);
         exit(1);
     }
 

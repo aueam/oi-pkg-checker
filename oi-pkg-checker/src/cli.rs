@@ -58,8 +58,8 @@ pub enum DataCommands {
     /// Run analyze
     Run {
         /// load catalogs (Absolute paths)
-        #[arg(long, value_name = "FILES", num_args = 1.., value_delimiter = ' ')]
-        catalogs: Vec<PathBuf>,
+        #[arg(long, value_name = "FILE")]
+        catalog: Vec<PathBuf>,
 
         /// path to oi userland repo (Absolute path)
         #[arg(long, value_name = "PATH")]
