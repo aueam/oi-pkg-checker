@@ -231,7 +231,13 @@ pub fn open_json_file(source_path: PathBuf) -> Value {
     file.read_to_string(&mut contains).expect("failed to read file");
 
     // parse json and return
-    serde_json::from_str(&contains).expect("failed to parse JSON")
+    match serde_json::from_str::<Value>(&contains) {
+        Ok(json) => return json,
+        Err(err) => {
+            error!("fatal invalid JSON found in {:?}, error: {}", source_path, err);
+            exit(1);
+        }
+    }
 }
 
 pub fn load_encumbered_catalog_dependency_c(components: &mut Components, source_path: PathBuf, package_names_in_pkg5_list: &ComponentPackagesList) -> RenamedPackageInComponentList {
