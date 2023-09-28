@@ -14,8 +14,7 @@ use fmri::{FMRI, fmri_list::FMRIList, compare::Compare};
 use crate::{
     assets::{
         assets::Assets,
-        catalog_dependency_c::load_catalog_dependency_c,
-        catalog_encumbered_dependency_c::load_encumbered_catalog_dependency_c,
+        catalogs_c::load_catalog_c,
         open_indiana_oi_userland_git::{
             build_dependencies, component_list, ComponentPackagesList,
             system_build_dependencies, system_test_dependencies, test_dependencies
@@ -60,19 +59,17 @@ impl Components {
         let component_packages_list = ComponentPackagesList::new(oi_userland_components, oi_userland_components_encumbered);
 
         match asset {
-            Assets::CatalogDependencyC(path) => {
-                let renamed = load_catalog_dependency_c(self, path, &component_packages_list);
-                if renamed.is_empty() {
-                    return Ok(());
+            Assets::Catalogs(paths) => {
+                let mut renamed_package_in_component_list = RenamedPackageInComponentList::new();
+                for path in paths {
+                    renamed_package_in_component_list += load_catalog_c(
+                        self,
+                        path,
+                        &component_packages_list
+                    );
                 }
-                Err(Ok(renamed))
-            }
-            Assets::CatalogEncumberedDependencyC(path) => {
-                let renamed = load_encumbered_catalog_dependency_c(self, path, &component_packages_list);
-                if renamed.is_empty() {
-                    return Ok(());
-                }
-                Err(Ok(renamed))
+
+                Err(Ok(renamed_package_in_component_list))
             }
             Assets::OpenIndianaOiUserlandGit {
                 load_component_list

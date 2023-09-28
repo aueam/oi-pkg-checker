@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use fmri::fmri_list::FMRIList;
 use crate::packages::components::Components;
 use std::process::Command;
-use crate::assets::catalog_encumbered_dependency_c::open_json_file;
+use crate::assets::catalogs_c::open_json_file;
 use crate::assets::open_indiana_oi_userland_git::Errors::{First, Second};
 use fmri::FMRI;
 use crate::packages::dependencies::Dependencies;

@@ -2,8 +2,7 @@ use std::path::PathBuf;
 
 /// All available assets
 pub enum Assets {
-    CatalogDependencyC(PathBuf),
-    CatalogEncumberedDependencyC(PathBuf),
+    Catalogs(Vec<PathBuf>),
     OpenIndianaOiUserlandGit {
         load_component_list: bool,
         load_build_dependencies: bool,

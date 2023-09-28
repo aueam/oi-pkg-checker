@@ -57,21 +57,17 @@ pub enum DataCommands {
 
     /// Run analyze
     Run {
-        /// load catalog.dependency.C
-        #[arg(short, long, value_name = "FILE")]
-        catalog: PathBuf,
+        // /// load catalog.encumbered.dependency.C
+        // #[arg(short, long, value_name = "FILE")]
+        // encumbered_catalog: PathBuf,
 
-        /// load catalog.encumbered.dependency.C
-        #[arg(short, long, value_name = "FILE")]
-        encumbered_catalog: PathBuf,
+        /// load catalogs
+        #[arg(long, value_name = "FILES", num_args = 1.., value_delimiter = ' ')]
+        catalogs: Vec<PathBuf>,
 
         /// path to oi userland components (Absolute path)
         #[arg(long, value_name = "PATH")]
         components_path: PathBuf,
-
-        // /// path to binary data
-        // #[arg(short, long, value_name = "FILE", default_value = "data.bin")]
-        // path_to_data: PathBuf,
 
         /// set debug on
         #[arg(short, long, default_value = "false")]

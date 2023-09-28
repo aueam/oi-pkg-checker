@@ -16,8 +16,8 @@ use crate::logger::Logger;
 use oi_pkg_checker_core::{
     MissingComponentForPackageList, NonExistingRequiredPackageList, ObsoletedRequiredPackageList,
     PartlyObsoletedRequiredPackageList, Problems, RenamedPackageInComponentList, report,
-    UnRunnableMakeCommandList, UselessComponentsList, PackageVersions, DependTypes,Components,
-    Assets, ComponentPackagesList
+    UnRunnableMakeCommandList, UselessComponentsList, PackageVersions, DependTypes, Components,
+    Assets, ComponentPackagesList,
 };
 
 
@@ -153,8 +153,7 @@ fn main() {
                                     exit(0);
                                 }
                                 DataCommands::Run {
-                                    catalog
-                                    , encumbered_catalog
+                                    catalogs
                                     , components_path
                                     , debug
                                 } => {
@@ -174,15 +173,8 @@ fn main() {
                                     let catalog_path = &components_path.clone();
                                     let encumbered_catalog_path = &PathBuf::from((components_path.to_string_lossy() + "/encumbered").to_string());
 
-                                    match components.load(Assets::CatalogDependencyC(catalog.clone()), catalog_path, encumbered_catalog_path) {
-                                        Ok(_) => {}
-                                        Err(problem) => match problem {
-                                            Ok(problems) => renamed_package_in_component_list += problems,
-                                            Err(_) => {}
-                                        }
-                                    }
-
-                                    match components.load(Assets::CatalogEncumberedDependencyC(encumbered_catalog.clone()), catalog_path, encumbered_catalog_path) {
+                                    match components.load(Assets::Catalogs(
+                                        catalogs.clone()), catalog_path, encumbered_catalog_path) {
                                         Ok(_) => {}
                                         Err(problem) => match problem {
                                             Ok(problems) => renamed_package_in_component_list += problems,

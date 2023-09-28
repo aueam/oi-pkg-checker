@@ -8,13 +8,13 @@ use log::{debug, error};
 use serde_json::Value;
 use fmri::{
     FMRI, Publisher,
-    Version, FMRIList
+    Version, FMRIList,
 };
 use crate::ComponentPackagesList;
 use crate::problems::{
     ProblemList,
     RenamedPackageInComponent,
-    RenamedPackageInComponentList
+    RenamedPackageInComponentList,
 };
 use crate::packages::component::Component;
 use crate::packages::components::Components;
@@ -161,11 +161,11 @@ fn parse_depend(depend: String) -> DependTypes {
                 panic!("cant find fmri attribute in require-any depend")
             }
             DependTypes::RequireAny(fmri_list)
-        },
+        }
         "conditional" => DependTypes::Conditional(attributes.get_fmri_from_attributes(), attributes.get_predicate_from_attributes()),
         "group" => DependTypes::Group(attributes.get_fmri_from_attributes()),
         _ => panic!("unknown depend type: {}", d_type)
-    }
+    };
 }
 
 fn parse_set(set: String) -> Name {
@@ -240,7 +240,7 @@ pub fn open_json_file(source_path: PathBuf) -> Value {
     }
 }
 
-pub fn load_encumbered_catalog_dependency_c(components: &mut Components, source_path: PathBuf, package_names_in_pkg5_list: &ComponentPackagesList) -> RenamedPackageInComponentList {
+pub fn load_catalog_c(components: &mut Components, source_path: PathBuf, package_names_in_pkg5_list: &ComponentPackagesList) -> RenamedPackageInComponentList {
     let mut renamed_package_in_component_list = RenamedPackageInComponentList::new();
 
     // open json file
@@ -307,19 +307,17 @@ pub fn load_encumbered_catalog_dependency_c(components: &mut Components, source_
                         components.add_obsoleted(package.clone().fmri());
 
                         if package.is_obsolete() {
-
                             for component_packages in package_names_in_pkg5_list.get() {
                                 for package_in_pkg5 in component_packages.get_packages_in_component().get_ref() {
                                     if package.fmri_ref().get_package_name_as_ref_string() == package_in_pkg5.get_package_name_as_ref_string() {
                                         renamed_package_in_component_list.add(RenamedPackageInComponent::new(
                                             package.clone().fmri(),
                                             false,
-                                            component_packages.get_component_name().clone()
+                                            component_packages.get_component_name().clone(),
                                         ))
                                     }
                                 }
                             }
-
                         } else {
                             panic!("function .add_package() can return Some(_) only when obsolete package is entered")
                         }
