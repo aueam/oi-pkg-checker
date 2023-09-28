@@ -2,7 +2,6 @@ build: build_release download_catalog download_encumbered_catalog
 
 build_release:
 	cargo build --release
-	mv target/release/oi-pkg-checker .
 
 download_catalog:
 	curl -o assets/catalog.dependency.C https://pkg.openindiana.org/hipster/catalog/1/catalog.dependency.C
