@@ -1,3 +1,4 @@
+use std::process::exit;
 use colored::{Colorize, CustomColor};
 use log::{Level, Log, Metadata, Record};
 
@@ -12,7 +13,13 @@ impl Log for Logger {
         if self.enabled(record.metadata()) {
             let (level, message) = match record.level() {
                 Level::Error => {
-                    (format!("[ERROR]").red(), format!("{}", record.args()).red())
+                    let msg = record.args().to_string();
+                    if msg.starts_with("fatal ") {
+                        println!("{} {}", format!("[FATAL]").truecolor(150, 0, 0).bold(), msg.trim_start_matches("fatal ").truecolor(150, 0, 0).bold());
+                        exit(1);
+                    } else {
+                        (format!("[ERROR]").red(), format!("{}", msg).red())
+                    }
                 }
                 Level::Warn => {
                     (format!("[WARN]").custom_color(CustomColor::new(255,140,0)), format!("{}", record.args()).custom_color(CustomColor::new(255,140,0)))
