@@ -28,9 +28,9 @@ pub enum Commands {
         /// checking valid fmri
         fmri: String,
 
-        /// path to oi userland components (Absolute path)
-        #[arg(value_name = "PATH")]
-        components_path: PathBuf,
+        /// path to oi userland repo (Absolute path)
+        #[arg(long, value_name = "PATH")]
+        repo_path: PathBuf,
 
         /// set debug on
         #[arg(short, long, default_value = "false")]
@@ -57,17 +57,13 @@ pub enum DataCommands {
 
     /// Run analyze
     Run {
-        // /// load catalog.encumbered.dependency.C
-        // #[arg(short, long, value_name = "FILE")]
-        // encumbered_catalog: PathBuf,
-
-        /// load catalogs
+        /// load catalogs (Absolute paths)
         #[arg(long, value_name = "FILES", num_args = 1.., value_delimiter = ' ')]
         catalogs: Vec<PathBuf>,
 
-        /// path to oi userland components (Absolute path)
+        /// path to oi userland repo (Absolute path)
         #[arg(long, value_name = "PATH")]
-        components_path: PathBuf,
+        repo_path: PathBuf,
 
         /// set debug on
         #[arg(short, long, default_value = "false")]

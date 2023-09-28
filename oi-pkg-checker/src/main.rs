@@ -64,7 +64,7 @@ fn main() {
                     exit(0);
                 }
                 Commands::CheckFMRI {
-                    components_path
+                    repo_path
                     , fmri
                     , debug
                 } => {
@@ -107,6 +107,8 @@ fn main() {
                             info!("fmri {} isn't require by any package", fmri);
                         }
                     }
+
+                    let components_path = PathBuf::from(format!("{:?}/components", repo_path));
 
                     let component_packages_list = ComponentPackagesList::new(
                         &components_path.clone(),
@@ -154,7 +156,7 @@ fn main() {
                                 }
                                 DataCommands::Run {
                                     catalogs
-                                    , components_path
+                                    , repo_path
                                     , debug
                                 } => {
                                     debug_on(debug);
@@ -169,6 +171,8 @@ fn main() {
 
 
                                     let mut components = Components::new();
+
+                                    let components_path = PathBuf::from(format!("{:?}/components", repo_path));
 
                                     let catalog_path = &components_path.clone();
                                     let encumbered_catalog_path = &PathBuf::from((components_path.to_string_lossy() + "/encumbered").to_string());
