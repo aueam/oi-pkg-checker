@@ -28,7 +28,7 @@ pub enum Commands {
         /// checking valid fmri
         fmri: String,
 
-        /// path to oi userland repo (Absolute path)
+        /// path to oi userland repo (absolute path)
         #[arg(long, value_name = "PATH")]
         repo_path: PathBuf,
 
@@ -57,11 +57,11 @@ pub enum DataCommands {
 
     /// Run analyze
     Run {
-        /// load catalogs (Absolute paths)
+        /// load catalogs (absolute paths)
         #[arg(long, value_name = "FILE")]
         catalog: Vec<PathBuf>,
 
-        /// path to oi userland repo (Absolute path)
+        /// path to oi userland repo (absolute path)
         #[arg(long, value_name = "PATH")]
         repo_path: PathBuf,
 
