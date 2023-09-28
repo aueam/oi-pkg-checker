@@ -37,7 +37,7 @@ impl ComponentPackagesList {
         Command::new("sh")
             .arg("-c")
             .arg(format!("cd {} && rm -f components.mk ; gmake components.mk", components_path))
-            .spawn()
+            .output()
             .expect("failed to run command");
 
         let output = Command::new("cat")
@@ -104,7 +104,7 @@ impl ComponentPackagesList {
         Command::new("sh")
             .arg("-c")
             .arg(format!("cd {} && rm -f components.mk ; gmake components.mk", components_path_encumbered))
-            .spawn()
+            .output()
             .expect("failed to run command");
 
         let output = Command::new("cat")
