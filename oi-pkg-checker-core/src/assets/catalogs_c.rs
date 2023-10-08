@@ -224,7 +224,7 @@ pub fn open_json_file(mut source_path: PathBuf) -> Value {
     }
 
     // open file
-    let mut file = File::open(source_path.clone()).expect("failed to open file");
+    let mut file = File::open(source_path.clone()).expect(&format!("failed to open file {:?}", source_path));
 
     // get content
     let mut contains = String::new();
