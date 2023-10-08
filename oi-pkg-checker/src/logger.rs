@@ -1,5 +1,5 @@
 use std::process::exit;
-use colored::{Colorize, CustomColor};
+use colored::Colorize;
 use log::{Level, Log, Metadata, Record};
 
 pub struct Logger;
@@ -22,7 +22,7 @@ impl Log for Logger {
                     }
                 }
                 Level::Warn => {
-                    (format!("[WARN]").yellow(), format!("{}", record.args()).yellow())
+                    (format!("[WARN]").bright_yellow(), format!("{}", record.args()).bright_yellow())
                 }
                 Level::Info => {
                     (format!("[INFO]").bright_green(), format!("{}", record.args()).bright_green())
