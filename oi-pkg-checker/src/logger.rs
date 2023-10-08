@@ -15,14 +15,14 @@ impl Log for Logger {
                 Level::Error => {
                     let msg = record.args().to_string();
                     if msg.starts_with("fatal ") {
-                        println!("{} {}", format!("[FATAL]").truecolor(150, 0, 0).bold(), msg.trim_start_matches("fatal ").truecolor(150, 0, 0).bold());
+                        println!("{} {}", format!("[FATAL]").red().bold(), msg.trim_start_matches("fatal ").red().bold());
                         exit(1);
                     } else {
                         (format!("[ERROR]").red(), format!("{}", msg).red())
                     }
                 }
                 Level::Warn => {
-                    (format!("[WARN]").custom_color(CustomColor::new(255,140,0)), format!("{}", record.args()).custom_color(CustomColor::new(255,140,0)))
+                    (format!("[WARN]").yellow(), format!("{}", record.args()).yellow())
                 }
                 Level::Info => {
                     (format!("[INFO]").bright_green(), format!("{}", record.args()).bright_green())
