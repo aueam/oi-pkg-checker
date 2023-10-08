@@ -27,9 +27,12 @@ impl DependTypes {
             DependTypes::Incorporate(fmri) => ("incorporate".to_owned(), fmri.get_package_name_as_string()),
             DependTypes::RequireAny(fmri_list) => {
                 let mut string = String::new();
-                for fmri in fmri_list.get_ref() {
+                let len = fmri_list.get_ref().len();
+                for (index, fmri) in fmri_list.get_ref().iter().enumerate() {
                     string.push_str(fmri.get_package_name_as_ref_string());
-                    string.push_str(", ");
+                    if index+1 < len {
+                        string.push_str(", ");
+                    }
                 }
                 ("require-any".to_owned(), string)
             },
