@@ -77,7 +77,8 @@ impl ComponentPackagesList {
             }
 
             let component_name = line.split_whitespace().last().unwrap().to_owned();
-            let path_to_component = PathBuf::from(format!("{}/{}", components_path, component_name));
+
+            let path_to_component = PathBuf::from(component_name.clone());
 
             let mut packages_in_component = FMRIList::new();
             for fmri in open_json_file(
@@ -118,7 +119,7 @@ impl ComponentPackagesList {
             }
 
             let component_name = line.split_whitespace().last().unwrap().to_owned();
-            let path_to_component = PathBuf::from(format!("{}/{}", components_path_encumbered, component_name));
+            let path_to_component = PathBuf::from(component_name.clone());
 
             let mut packages_in_component = FMRIList::new();
             for fmri in open_json_file(
@@ -288,7 +289,7 @@ fn load_dependencies(
                             continue;
                         }
                     };
-                    
+
                     for package in packet_versions.get_packages_ref_mut() {
                         match dependencies_type {
                             DependencyTypes::Build => {

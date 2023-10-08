@@ -1,9 +1,4 @@
-use std::{
-    fs::File,
-    io::Read,
-    path::PathBuf,
-    process::exit,
-};
+use std::{env, fs::File, io::Read, path::PathBuf, process::exit};
 use log::{debug, error};
 use serde_json::Value;
 use fmri::{
@@ -217,10 +212,15 @@ fn parse_action(action: String) -> Results {
     panic!("other unknown action: {}", &action.clone())
 }
 
-pub fn open_json_file(source_path: PathBuf) -> Value {
+pub fn open_json_file(mut source_path: PathBuf) -> Value {
     if !source_path.is_absolute() {
-        error!("path {:?} isn't absolute", source_path);
-        exit(1);
+        if let Ok(mut current_dir) = env::current_dir() {
+            current_dir.push(source_path);
+            source_path = current_dir;
+        } else {
+            error!("can not get current dir of {:?}", source_path);
+            exit(1);
+        }
     }
 
     // open file
