@@ -1068,7 +1068,7 @@ pub fn report(
     }
 
     if !partly_obsolete_required_package_list.is_empty() {
-        warn!("Number of obsoleted packages with older normal version/s which are needed as dependency: {}", partly);
+        warn!("Number of obsoleted packages with older normal version which are needed as dependency: {}", partly);
     }
 
     if !missing_component_for_package_list.is_empty() {

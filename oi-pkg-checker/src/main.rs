@@ -88,7 +88,7 @@ fn main() {
 
                     match components.get_dependencies_with_fmri(fmri) {
                         Some(dependencies) => {
-                            info!("fmri {} is required by package/s:", fmri);
+                            info!("fmri {} is required by:", fmri);
                             for (fmri, dependency_type, dependency) in dependencies {
                                 let d_type = match dependency.get_ref() {
                                     DependTypes::Require(_) => "require",
@@ -104,7 +104,7 @@ fn main() {
                             }
                         }
                         None => {
-                            info!("fmri {} isn't require by any package", fmri);
+                            info!("fmri {} is not required by any package", fmri);
                         }
                     }
 
