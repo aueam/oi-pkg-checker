@@ -152,11 +152,6 @@ impl ComponentPackagesList {
     pub fn get_component_name_of_package_fmri(&self, comparing_to: &FMRI) -> Option<String> {
         for component_packages in self.get() {
             for fmri in component_packages.packages_in_component.get_ref() {
-
-                if comparing_to.get_package_name_as_ref_string() == "library/python/setuptools-37" {
-                    println!("{}", fmri);
-                }
-
                 if fmri.package_name_eq(comparing_to) {
                     return Some(component_packages.component_name.clone())
                 }
