@@ -3,10 +3,9 @@ Cargo.lock
 
 assets/catalog.dependency.C
 assets/catalog.encumbered.dependency.C
+assets/oi-userland/
 
 .idea
 
-data.bin
-problems.bin
 data.bin
 problems.bin
