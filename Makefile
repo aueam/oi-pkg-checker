@@ -15,8 +15,7 @@ download_repo:
 	git clone https://github.com/OpenIndiana/oi-userland.git assets/oi-userland
 
 update_repo:
-	cd assets/oi-userland/
-	git pull
+	cd assets/oi-userland/ && git pull
 
 clean:
 	rm assets/catalog.dependency.C assets/catalog.encumbered.dependency.C
