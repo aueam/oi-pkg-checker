@@ -319,7 +319,6 @@ impl RenamedPackageInComponentList {
 
         let mut printed = Vec::new();
         for error in self.get_ref() {
-
             if printed.contains(error.get_package_ref().get_package_name_as_ref_string()) {
                 continue;
             }
@@ -374,14 +373,8 @@ impl NonExistingRequiredPackageList {
                         package_or_component_name = required_by.get_package_name_as_ref_string().clone();
                     }
                     "by ".to_owned()
-                },
+                }
             };
-
-            if printed.contains(&package_or_component_name) {
-                continue;
-            }
-
-            printed.push(format!("{}{}", fmri.clone(), package_or_component_name.clone()));
 
             by_and_types.push_str(
                 &match error.get_renamed() {
@@ -403,6 +396,12 @@ impl NonExistingRequiredPackageList {
                     }
                 }
             );
+
+            if printed.contains(&format!("{}{}", fmri.clone(), by_and_types.clone())) {
+                continue;
+            }
+
+            printed.push(format!("{}{}", fmri.clone(), by_and_types.clone()));
 
             warn!("package {} doesn't exist, but is required {}", fmri, by_and_types)
         }
@@ -447,7 +446,7 @@ impl ObsoletedRequiredPackageList {
                         package_or_component_name = required_by.get_package_name_as_ref_string().clone();
                     }
                     "by ".to_owned()
-                },
+                }
             };
 
             if printed.contains(&package_or_component_name) {
@@ -520,7 +519,7 @@ impl PartlyObsoletedRequiredPackageList {
                         package_or_component_name = required_by.get_package_name_as_ref_string().clone();
                     }
                     "by ".to_owned()
-                },
+                }
             };
 
             if printed.contains(&package_or_component_name) {
