@@ -1,12 +1,10 @@
 mod logger;
 mod cli;
 
-use std::io::{Write};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use clap::Parser;
 use log::{LevelFilter, debug, error, info};
-use reqwest::IntoUrl;
 use fmri::FMRI;
 use crate::cli::{Args, Commands};
 use crate::logger::Logger;
