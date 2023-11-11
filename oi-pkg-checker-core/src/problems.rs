@@ -449,12 +449,6 @@ impl ObsoletedRequiredPackageList {
                 }
             };
 
-            if printed.contains(&package_or_component_name) {
-                continue;
-            }
-
-            printed.push(format!("{}{}", fmri.clone(), package_or_component_name.clone()));
-
             by_and_types.push_str(
                 &match error.get_renamed() {
                     true => match dependency_type {
@@ -475,6 +469,12 @@ impl ObsoletedRequiredPackageList {
                     }
                 }
             );
+
+            if printed.contains(&format!("{}{}", fmri.clone(), by_and_types.clone())) {
+                continue;
+            }
+
+            printed.push(format!("{}{}", fmri.clone(), by_and_types.clone()));
 
             error!("obsoleted package {} is required {}", fmri, by_and_types);
         }
@@ -522,12 +522,6 @@ impl PartlyObsoletedRequiredPackageList {
                 }
             };
 
-            if printed.contains(&package_or_component_name) {
-                continue;
-            }
-
-            printed.push(format!("{}{}", fmri.clone(), package_or_component_name.clone()));
-
             by_and_types.push_str(
                 &match error.get_renamed() {
                     true => match dependency_type {
@@ -549,7 +543,13 @@ impl PartlyObsoletedRequiredPackageList {
                 }
             );
 
-            warn!("obsoleted package {} is required {}", fmri, by_and_types);
+            if printed.contains(&format!("{}{}", fmri.clone(), by_and_types.clone())) {
+                continue;
+            }
+
+            printed.push(format!("{}{}", fmri.clone(), by_and_types.clone()));
+
+            warn!("obsoleted package {} is required{}", fmri, by_and_types);
         }
 
         printed.len()
@@ -566,7 +566,14 @@ impl UnRunnableMakeCommandList {
             panic!("reported problem can't be empty")
         }
 
+        let mut printed = Vec::new();
         for error in self.get_ref() {
+
+            if printed.contains(&format!("{}{:?}", error.get_command_ref(), error.get_path_ref())) {
+                continue;
+            }
+            printed.push(format!("{}{:?}", error.get_command_ref(), error.get_path_ref()));
+
             error!("can't run {} in {:?}", error.get_command_ref(), error.get_path_ref())
         }
     }
@@ -583,7 +590,14 @@ impl MissingComponentForPackageList {
             panic!("reported problem can't be empty")
         }
 
+        let mut printed = Vec::new();
         for error in self.get_ref() {
+
+            if printed.contains(&format!("{}", error.get_package_ref())) {
+                continue;
+            }
+            printed.push(format!("{}", error.get_package_ref()));
+
             warn!("missing component for {}", error.get_package_ref())
         }
     }
