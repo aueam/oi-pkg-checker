@@ -54,9 +54,8 @@ impl Components {
         &mut self,
         asset: Assets,
         oi_userland_components: &PathBuf,
-        oi_userland_components_encumbered: &PathBuf
     ) -> Result<(), Result<RenamedPackageInComponentList, (MissingComponentForPackageList, RenamedPackageInComponentList, UnRunnableMakeCommandList)>> {
-        let component_packages_list = ComponentPackagesList::new(oi_userland_components, oi_userland_components_encumbered);
+        let component_packages_list = ComponentPackagesList::new(oi_userland_components);
 
         match asset {
             Assets::Catalogs(paths) => {

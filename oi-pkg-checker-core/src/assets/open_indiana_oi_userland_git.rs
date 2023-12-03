@@ -31,12 +31,12 @@ impl ComponentPackages {
 }
 
 impl ComponentPackagesList {
-    pub fn new(oi_userland_components: &PathBuf, oi_userland_components_encumbered: &PathBuf) -> Self {
+    pub fn new(oi_userland_components: &PathBuf) -> Self {
         let components_path = oi_userland_components.to_string_lossy();
 
         Command::new("sh")
             .arg("-c")
-            .arg(format!("cd {} && rm -f components.mk ; gmake components.mk", components_path))
+            .arg(format!("cd {} && rm -f components.mk ; gmake COMPONENTS_IGNORE=/dev/null components.mk", components_path))
             .output()
             .expect("failed to run command");
 
@@ -48,78 +48,11 @@ impl ComponentPackagesList {
         let mut component_packages_list: Self = Self(vec![]);
 
         for line in String::from_utf8(output.stdout).unwrap().split("\n") {
-            if line == "" {
-                // TODO: ???
-                let component_name = "openindiana/illumos-gate".to_owned();
-                let path_to_component = PathBuf::from(format!("{}/{}", components_path, component_name));
-
-                let mut packages_in_component = FMRIList::new();
-                for fmri in open_json_file(
-                    PathBuf::from(format!("{}/pkg5", path_to_component.clone().to_string_lossy())) // pkg5 location
-                )
-                    .as_object()
-                    .expect("expect object")
-                    .get("fmris")
-                    .expect("expect fmris")
-                    .as_array()
-                    .expect("expect array") {
-
-                    packages_in_component.add(FMRI::parse_raw(&fmri.as_str().expect("expect string").to_owned()))
-                }
-
-                component_packages_list.0.push(ComponentPackages {
-                    component_name,
-                    path_to_component,
-                    packages_in_component,
-                });
-
-                break
-            }
+            if line == "" { continue; }
 
             let component_name = line.split_whitespace().last().unwrap().to_owned();
 
             let path_to_component = PathBuf::from(format!("{}/{}", components_path, component_name));
-
-            let mut packages_in_component = FMRIList::new();
-            for fmri in open_json_file(
-                PathBuf::from(format!("{}/pkg5", path_to_component.clone().to_string_lossy())) // pkg5 location
-            )
-                .as_object()
-                .expect("expect object")
-                .get("fmris")
-                .expect("expect fmris")
-                .as_array()
-                .expect("expect array") {
-
-                packages_in_component.add(FMRI::parse_raw(&fmri.as_str().expect("expect string").to_owned()))
-            }
-
-            component_packages_list.0.push(ComponentPackages {
-                component_name,
-                path_to_component,
-                packages_in_component,
-            });
-        }
-
-        let components_path_encumbered = oi_userland_components_encumbered.to_string_lossy();
-        Command::new("sh")
-            .arg("-c")
-            .arg(format!("cd {} && rm -f components.mk ; gmake components.mk", components_path_encumbered))
-            .output()
-            .expect("failed to run command");
-
-        let output = Command::new("cat")
-            .arg(format!("{}/components.mk", components_path_encumbered.clone()))
-            .output()
-            .expect("failed to run command");
-
-        for line in String::from_utf8(output.stdout).unwrap().split("\n") {
-            if line == "" {
-                break
-            }
-
-            let component_name = line.split_whitespace().last().unwrap().to_owned();
-            let path_to_component = PathBuf::from(format!("{}/{}", components_path_encumbered, component_name));
 
             let mut packages_in_component = FMRIList::new();
             for fmri in open_json_file(

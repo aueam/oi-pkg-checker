@@ -105,8 +105,7 @@ fn main() {
                     let components_path = PathBuf::from("assets/oi-userland/components");
 
                     let component_packages_list = ComponentPackagesList::new(
-                        &components_path.clone(),
-                        &PathBuf::from((components_path.to_string_lossy() + "/encumbered").to_string()),
+                        &components_path.clone()
                     );
 
                     match component_packages_list.get_component_name_of_package_versions(
@@ -141,12 +140,7 @@ fn main() {
 
                     let components_path = PathBuf::from("assets/oi-userland/components");
 
-                    let catalog_path = &components_path.clone();
-
-                    let encumbered_catalog_path = &PathBuf::from((components_path.to_string_lossy() + "/encumbered").to_string());
-
-                    match components.load(Assets::Catalogs(
-                        catalog.clone()), catalog_path, encumbered_catalog_path) {
+                    match components.load(Assets::Catalogs(catalog.clone()), &components_path) {
                         Ok(_) => {}
                         Err(problem) => match problem {
                             Ok(problems) => renamed_package_in_component_list += problems,
@@ -160,7 +154,7 @@ fn main() {
                         load_test_dependencies: true,
                         load_system_build_dependencies: true,
                         load_system_test_dependencies: true,
-                    }, catalog_path, encumbered_catalog_path) {
+                    }, &components_path) {
                         Ok(_) => {}
                         Err(error) => match error {
                             Ok(_) => {}
