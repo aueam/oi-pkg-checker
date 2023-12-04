@@ -549,7 +549,7 @@ impl PartlyObsoletedRequiredPackageList {
 
             printed.push(format!("{}{}", fmri.clone(), by_and_types.clone()));
 
-            warn!("obsoleted package {} is required{}", fmri, by_and_types);
+            warn!("obsoleted package {} is required {}", fmri, by_and_types);
         }
 
         printed.len()
