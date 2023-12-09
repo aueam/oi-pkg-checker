@@ -4,6 +4,7 @@ members = [
 	"oi-pkg-checker",
 	"oi-pkg-checker-core"
 ]
+resolver = "2"
 
 [profile.release]
 opt-level = 3
