@@ -148,13 +148,7 @@ fn main() {
                         }
                     }
 
-                    match components.load(Assets::OpenIndianaOiUserlandGit {
-                        load_component_list: true,
-                        load_build_dependencies: true,
-                        load_test_dependencies: true,
-                        load_system_build_dependencies: true,
-                        load_system_test_dependencies: true,
-                    }, &components_path) {
+                    match components.load(Assets::OpenIndianaOiUserlandGit, &components_path) {
                         Ok(_) => {}
                         Err(error) => match error {
                             Ok(_) => {}

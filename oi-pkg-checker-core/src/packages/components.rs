@@ -70,68 +70,52 @@ impl Components {
 
                 Err(Ok(renamed_package_in_component_list))
             }
-            Assets::OpenIndianaOiUserlandGit {
-                load_component_list
-                , load_build_dependencies
-                , load_test_dependencies
-                , load_system_build_dependencies
-                , load_system_test_dependencies
-            } => {
+            Assets::OpenIndianaOiUserlandGit => {
                 let mut missing_component_for_package_list = MissingComponentForPackageList::new();
                 let mut renamed_package_in_component_list = RenamedPackageInComponentList::new();
                 let mut un_runnable_make_command_list = UnRunnableMakeCommandList::new();
 
-                if load_component_list {
-                    match component_list(self, component_packages_list.clone()) {
-                        Ok(_) => {}
-                        Err((missing, renamed)) => {
-                            missing_component_for_package_list += missing;
-                            renamed_package_in_component_list += renamed;
-                        }
+                match component_list(self, component_packages_list.clone()) {
+                    Ok(_) => {}
+                    Err((missing, renamed)) => {
+                        missing_component_for_package_list += missing;
+                        renamed_package_in_component_list += renamed;
                     }
                 }
 
-                if load_build_dependencies {
-                    match build_dependencies(self, component_packages_list.clone()) {
-                        Ok(_) => {}
-                        Err((missing, renamed, un_runnable)) => {
-                            missing_component_for_package_list += missing;
-                            renamed_package_in_component_list += renamed;
-                            un_runnable_make_command_list += un_runnable;
-                        }
+                match build_dependencies(self, component_packages_list.clone()) {
+                    Ok(_) => {}
+                    Err((missing, renamed, un_runnable)) => {
+                        missing_component_for_package_list += missing;
+                        renamed_package_in_component_list += renamed;
+                        un_runnable_make_command_list += un_runnable;
                     }
                 }
 
-                if load_test_dependencies {
-                    match test_dependencies(self, component_packages_list.clone()) {
-                        Ok(_) => {}
-                        Err((missing, renamed, un_runnable)) => {
-                            missing_component_for_package_list += missing;
-                            renamed_package_in_component_list += renamed;
-                            un_runnable_make_command_list += un_runnable;
-                        }
+                match test_dependencies(self, component_packages_list.clone()) {
+                    Ok(_) => {}
+                    Err((missing, renamed, un_runnable)) => {
+                        missing_component_for_package_list += missing;
+                        renamed_package_in_component_list += renamed;
+                        un_runnable_make_command_list += un_runnable;
                     }
                 }
 
-                if load_system_build_dependencies {
-                    match system_build_dependencies(self, component_packages_list.clone()) {
-                        Ok(_) => {}
-                        Err((missing, renamed, un_runnable)) => {
-                            missing_component_for_package_list += missing;
-                            renamed_package_in_component_list += renamed;
-                            un_runnable_make_command_list += un_runnable;
-                        }
+                match system_build_dependencies(self, component_packages_list.clone()) {
+                    Ok(_) => {}
+                    Err((missing, renamed, un_runnable)) => {
+                        missing_component_for_package_list += missing;
+                        renamed_package_in_component_list += renamed;
+                        un_runnable_make_command_list += un_runnable;
                     }
                 }
 
-                if load_system_test_dependencies {
-                    match system_test_dependencies(self, component_packages_list) {
-                        Ok(_) => {}
-                        Err((missing, renamed, un_runnable)) => {
-                            missing_component_for_package_list += missing;
-                            renamed_package_in_component_list += renamed;
-                            un_runnable_make_command_list += un_runnable;
-                        }
+                match system_test_dependencies(self, component_packages_list) {
+                    Ok(_) => {}
+                    Err((missing, renamed, un_runnable)) => {
+                        missing_component_for_package_list += missing;
+                        renamed_package_in_component_list += renamed;
+                        un_runnable_make_command_list += un_runnable;
                     }
                 }
 
