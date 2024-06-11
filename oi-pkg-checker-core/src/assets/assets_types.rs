@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 /// All available assets
-pub enum Assets {
+pub enum AssetTypes {
     Catalogs(Vec<PathBuf>),
     OpenIndianaOiUserlandGit
 }

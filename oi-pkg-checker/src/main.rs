@@ -12,7 +12,7 @@ use oi_pkg_checker_core::{
     MissingComponentForPackageList, NonExistingRequiredPackageList, ObsoletedRequiredPackageList,
     PartlyObsoletedRequiredPackageList, Problems, RenamedPackageInComponentList, report,
     UnRunnableMakeCommandList, UselessComponentsList, PackageVersions, DependTypes, Components,
-    Assets, ComponentPackagesList,
+    AssetTypes, ComponentPackagesList,
 };
 
 
@@ -140,7 +140,7 @@ fn main() {
 
                     let components_path = PathBuf::from("assets/oi-userland/components");
 
-                    match components.load(Assets::Catalogs(catalog.clone()), &components_path) {
+                    match components.load(AssetTypes::Catalogs(catalog.clone()), &components_path) {
                         Ok(_) => {}
                         Err(problem) => match problem {
                             Ok(problems) => renamed_package_in_component_list += problems,
@@ -148,7 +148,7 @@ fn main() {
                         }
                     }
 
-                    match components.load(Assets::OpenIndianaOiUserlandGit, &components_path) {
+                    match components.load(AssetTypes::OpenIndianaOiUserlandGit, &components_path) {
                         Ok(_) => {}
                         Err(error) => match error {
                             Ok(_) => {}

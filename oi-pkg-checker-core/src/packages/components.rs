@@ -13,7 +13,7 @@ use fmri::{FMRI, fmri_list::FMRIList, compare::Compare};
 
 use crate::{
     assets::{
-        assets::Assets,
+        assets_types::AssetTypes,
         catalogs_c::load_catalog_c,
         open_indiana_oi_userland_git::{
             build_dependencies, component_list, ComponentPackagesList,
@@ -52,13 +52,13 @@ impl Components {
 
     pub fn load(
         &mut self,
-        asset: Assets,
+        asset: AssetTypes,
         oi_userland_components: &PathBuf,
     ) -> Result<(), Result<RenamedPackageInComponentList, (MissingComponentForPackageList, RenamedPackageInComponentList, UnRunnableMakeCommandList)>> {
         let component_packages_list = ComponentPackagesList::new(oi_userland_components);
 
         match asset {
-            Assets::Catalogs(paths) => {
+            AssetTypes::Catalogs(paths) => {
                 let mut renamed_package_in_component_list = RenamedPackageInComponentList::new();
                 for path in paths {
                     renamed_package_in_component_list += load_catalog_c(
@@ -70,7 +70,7 @@ impl Components {
 
                 Err(Ok(renamed_package_in_component_list))
             }
-            Assets::OpenIndianaOiUserlandGit => {
+            AssetTypes::OpenIndianaOiUserlandGit => {
                 let mut missing_component_for_package_list = MissingComponentForPackageList::new();
                 let mut renamed_package_in_component_list = RenamedPackageInComponentList::new();
                 let mut un_runnable_make_command_list = UnRunnableMakeCommandList::new();

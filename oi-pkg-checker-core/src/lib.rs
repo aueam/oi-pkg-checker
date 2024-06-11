@@ -4,7 +4,7 @@ pub mod problems;
 #[cfg(test)]
 mod tests;
 
-pub use assets::assets::Assets;
+pub use assets::assets_types::AssetTypes;
 pub use assets::open_indiana_oi_userland_git::ComponentPackagesList;
 
 pub use packages::components::Components;
