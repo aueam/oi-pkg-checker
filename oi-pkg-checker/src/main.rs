@@ -29,8 +29,7 @@ fn main() {
     let problems_path = "problems.bin";
     let components_path = &PathBuf::from("assets/oi-userland/components");
 
-    let args = Args::parse();
-    match &args.command {
+    match &Args::parse().command {
         Some(subcommand) => match subcommand {
             Commands::PrintProblems { debug } => {
                 debug_on(debug);
