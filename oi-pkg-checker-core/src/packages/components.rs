@@ -1,31 +1,27 @@
+use crate::{
+    assets::{
+        assets_types::AssetTypes,
+        catalogs_c::load_catalog_c,
+        open_indiana_oi_userland_git::{component_list, load_dependencies, ComponentPackagesList},
+    },
+    packages::{
+        component::Component, dependencies::Dependencies, dependency::Dependency,
+        dependency_type::DependencyTypes, package_versions::PackageVersions,
+    },
+    problems::Problem::{RenamedNeedsRenamed, UselessComponent},
+    Problems,
+};
+use bincode::{deserialize, serialize};
+use fmri::{compare::Compare, fmri_list::FMRIList, FMRI};
+use log::{debug, info};
+use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
     fmt::{Display, Formatter},
     fs::File,
     io::{Read, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
-
-use log::{debug, info};
-use serde::{Serialize, Deserialize};
-use bincode::{serialize, deserialize};
-use fmri::{FMRI, fmri_list::FMRIList, compare::Compare};
-
-use crate::{assets::{
-    assets_types::AssetTypes,
-    catalogs_c::load_catalog_c,
-    open_indiana_oi_userland_git::{
-        component_list, ComponentPackagesList,
-    },
-}, packages::{
-    component::Component,
-    package_versions::PackageVersions,
-    dependencies::{Dependencies},
-    dependency::Dependency,
-    dependency_type::DependencyTypes,
-}, Problems};
-use crate::assets::open_indiana_oi_userland_git::load_dependencies;
-use crate::problems::Problem::{RenamedNeedsRenamed, UselessComponent};
 
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct Components {
@@ -41,7 +37,12 @@ impl Components {
         }
     }
 
-    pub fn load(&mut self, problems: &mut Problems, asset: AssetTypes, oi_userland_components: &Path) {
+    pub fn load(
+        &mut self,
+        problems: &mut Problems,
+        asset: AssetTypes,
+        oi_userland_components: &Path,
+    ) {
         let component_packages_list = ComponentPackagesList::new(oi_userland_components);
 
         match asset {
@@ -83,10 +84,7 @@ impl Components {
     pub fn serialize<P: AsRef<Path> + ?Sized>(&self, path: &P) {
         File::create(path)
             .unwrap()
-            .write_all(
-                &serialize(self)
-                    .expect("failed to serialize data into binary")
-            )
+            .write_all(&serialize(self).expect("failed to serialize data into binary"))
             .expect("TODO: panic message");
     }
 
@@ -99,11 +97,19 @@ impl Components {
         deserialize(data).expect("failed to deserialize data from binary")
     }
 
-    pub fn add_package_to_component_with_name(&mut self, package_versions: &PackageVersions, component_name: String) {
-        if component_name != "" {
+    pub fn add_package_to_component_with_name(
+        &mut self,
+        package_versions: &PackageVersions,
+        component_name: String,
+    ) {
+        if !component_name.is_empty() {
             for component in self.get_ref_mut() {
                 if component.get_name_ref() == &component_name {
-                    debug!("adding {} into component: {}", package_versions.fmri_ref(), component_name);
+                    debug!(
+                        "adding {} into component: {}",
+                        package_versions.fmri_ref(),
+                        component_name
+                    );
                     component.add(package_versions.clone());
                     return;
                 }
@@ -120,7 +126,13 @@ impl Components {
             if component.get_name_ref() == "" {
                 let package_versions = component.get_versions_ref();
                 assert_eq!(package_versions.len(), 1);
-                let name = "/".to_owned() + &*package_versions.first().unwrap().fmri_ref().get_package_name_as_ref_string().clone();
+                let name = "/".to_owned()
+                    + &*package_versions
+                        .first()
+                        .unwrap()
+                        .fmri_ref()
+                        .get_package_name_as_ref_string()
+                        .clone();
                 debug!("naming unnamed component with name: /{}", &name);
                 component.change_name(name);
             }
@@ -220,7 +232,6 @@ impl Components {
     //     Some(cycles)
     // }
 
-
     pub fn check_useless_packages(&self) -> FMRIList {
         let mut useless_fmri_list = FMRIList::new();
 
@@ -254,7 +265,7 @@ impl Components {
                     if package.fmri_ref().package_name_ne(fmri) {
                         match package.is_fmri_needed_as_dependency(self, fmri) {
                             None => {}
-                            Some(_) => return true
+                            Some(_) => return true,
                         }
                     }
                 }
@@ -263,7 +274,11 @@ impl Components {
         false
     }
 
-    pub fn get_dependencies_of_fmri(&self, fmri: &FMRI, dependency_types: Vec<DependencyTypes>) -> Dependencies {
+    pub fn get_dependencies_of_fmri(
+        &self,
+        fmri: &FMRI,
+        dependency_types: Vec<DependencyTypes>,
+    ) -> Dependencies {
         let mut dependencies: Dependencies = Dependencies::new();
 
         for component in self.get_ref() {
@@ -273,12 +288,22 @@ impl Components {
 
                     for dependency_type in &dependency_types {
                         dependencies += match dependency_type {
-                            DependencyTypes::Runtime => package.get_runtime_dependencies_as_struct().clone(),
-                            DependencyTypes::Build => package.get_build_dependencies_as_struct().clone(),
-                            DependencyTypes::Test => package.get_test_dependencies_as_struct().clone(),
-                            DependencyTypes::SystemBuild => package.get_system_build_dependencies_as_struct().clone(),
-                            DependencyTypes::SystemTest => package.get_system_test_dependencies_as_struct().clone(),
-                            DependencyTypes::None => unimplemented!()
+                            DependencyTypes::Runtime => {
+                                package.get_runtime_dependencies_as_struct().clone()
+                            }
+                            DependencyTypes::Build => {
+                                package.get_build_dependencies_as_struct().clone()
+                            }
+                            DependencyTypes::Test => {
+                                package.get_test_dependencies_as_struct().clone()
+                            }
+                            DependencyTypes::SystemBuild => {
+                                package.get_system_build_dependencies_as_struct().clone()
+                            }
+                            DependencyTypes::SystemTest => {
+                                package.get_system_test_dependencies_as_struct().clone()
+                            }
+                            DependencyTypes::None => unimplemented!(),
                         }
                     }
                 }
@@ -287,13 +312,17 @@ impl Components {
         dependencies
     }
 
-    pub fn get_dependencies_with_fmri(&self, fmri: &FMRI) -> Option<Vec<(FMRI, String, Dependency)>> {
+    pub fn get_dependencies_with_fmri(
+        &self,
+        fmri: &FMRI,
+    ) -> Option<Vec<(FMRI, String, Dependency)>> {
         let mut list: Vec<(FMRI, String, Dependency)> = Vec::new();
         for component in self.get_ref() {
             for package_version in component.get_versions_ref() {
                 for package in package_version.get_packages_ref() {
                     if package.fmri_ref().package_name_ne(fmri) {
-                        if let Some(dependencies) = package.is_fmri_needed_as_dependency(self, fmri) {
+                        if let Some(dependencies) = package.is_fmri_needed_as_dependency(self, fmri)
+                        {
                             for (fmri, d_type, dependency) in dependencies {
                                 list.push((fmri, d_type, dependency))
                             }
@@ -303,7 +332,7 @@ impl Components {
             }
         }
 
-        if list.len() == 0 {
+        if list.is_empty() {
             return None;
         }
         Some(list)
@@ -369,7 +398,7 @@ impl Components {
     pub fn remove_empty_components(&mut self) {
         let mut components: Vec<Component> = vec![];
         for component in self.clone().get() {
-            if component.clone().get_versions().len() != 0 {
+            if !component.clone().get_versions().is_empty() {
                 components.push(component)
             }
         }
@@ -380,7 +409,7 @@ impl Components {
         for component in self.get_ref_mut() {
             let mut new_component: Vec<PackageVersions> = vec![];
             for package_version in component.clone().get_versions() {
-                if package_version.get_packages_ref().len() != 0 {
+                if !package_version.get_packages_ref().is_empty() {
                     new_component.push(package_version)
                 }
             }
@@ -411,10 +440,7 @@ impl Components {
         if fmri.package_name_eq(checking_fmri) {
             match fmri.compare(checking_fmri) {
                 Ordering::Equal | Ordering::Less => {
-                    return match self.is_there_newer_version(checking_fmri) {
-                        None => true,
-                        Some(_) => false
-                    };
+                    return self.is_there_newer_version(checking_fmri).is_none();
                 }
                 // dependency need greater version of fmri
                 Ordering::Greater => {}
@@ -542,16 +568,29 @@ impl Components {
     }
 }
 
+impl Default for Components {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Display for Components {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut string: String = "".to_owned();
 
         for (index, component) in self.get_ref().iter().enumerate() {
-            string.push_str(&*format!("{}. component: {}\n", index + 1, component.get_name_ref()));
+            string.push_str(&format!(
+                "{}. component: {}\n",
+                index + 1,
+                component.get_name_ref()
+            ));
             for package_versions in component.get_versions_ref() {
-                string.push_str(&*format!("  package_name: {}\n", package_versions.fmri_ref()));
+                string.push_str(&format!(
+                    "  package_name: {}\n",
+                    package_versions.fmri_ref()
+                ));
                 for package in package_versions.get_packages_ref() {
-                    string.push_str(&*format!("    package: {}\n", package.fmri_ref()));
+                    string.push_str(&format!("    package: {}\n", package.fmri_ref()));
                     for i in 0..5 {
                         match i {
                             0 => {
@@ -559,7 +598,11 @@ impl Display for Components {
                                 if dp.len() != 0 {
                                     string.push_str("      runtime dependencies:\n");
                                     for (index, dependency) in dp {
-                                        string.push_str(&*format!("        {}. {}\n", index + 1, dependency.get_ref()));
+                                        string.push_str(&format!(
+                                            "        {}. {}\n",
+                                            index + 1,
+                                            dependency.get_ref()
+                                        ));
                                     }
                                 }
                             }
@@ -568,7 +611,11 @@ impl Display for Components {
                                 if dp.len() != 0 {
                                     string.push_str("      build dependencies:\n");
                                     for (index, dependency) in dp {
-                                        string.push_str(&*format!("        {}. {}\n", index + 1, dependency.get_ref()));
+                                        string.push_str(&format!(
+                                            "        {}. {}\n",
+                                            index + 1,
+                                            dependency.get_ref()
+                                        ));
                                     }
                                 }
                             }
@@ -577,7 +624,11 @@ impl Display for Components {
                                 if dp.len() != 0 {
                                     string.push_str("      test dependencies:\n");
                                     for (index, dependency) in dp {
-                                        string.push_str(&*format!("        {}. {}\n", index + 1, dependency.get_ref()));
+                                        string.push_str(&format!(
+                                            "        {}. {}\n",
+                                            index + 1,
+                                            dependency.get_ref()
+                                        ));
                                     }
                                 }
                             }
@@ -586,7 +637,11 @@ impl Display for Components {
                                 if dp.len() != 0 {
                                     string.push_str("      system build dependencies:\n");
                                     for (index, dependency) in dp {
-                                        string.push_str(&*format!("        {}. {}\n", index + 1, dependency.get_ref()));
+                                        string.push_str(&format!(
+                                            "        {}. {}\n",
+                                            index + 1,
+                                            dependency.get_ref()
+                                        ));
                                     }
                                 }
                             }
@@ -595,11 +650,15 @@ impl Display for Components {
                                 if dp.len() != 0 {
                                     string.push_str("      system test dependencies:\n");
                                     for (index, dependency) in dp {
-                                        string.push_str(&*format!("        {}. {}\n", index + 1, dependency.get_ref()));
+                                        string.push_str(&format!(
+                                            "        {}. {}\n",
+                                            index + 1,
+                                            dependency.get_ref()
+                                        ));
                                     }
                                 }
                             }
-                            _ => panic!()
+                            _ => panic!(),
                         }
                     }
                 }

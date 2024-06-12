@@ -1,10 +1,7 @@
-use std::cmp::Ordering;
+use crate::packages::{components::Components, dependencies::Dependencies, dependency::Dependency};
+use fmri::{compare::Compare, FMRI};
 use serde::{Deserialize, Serialize};
-use fmri::FMRI;
-use fmri::compare::Compare;
-use crate::packages::components::Components;
-use crate::packages::dependencies::Dependencies;
-use crate::packages::dependency::Dependency;
+use std::cmp::Ordering;
 
 /// Package contains dependencies
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
@@ -41,32 +38,55 @@ impl Package {
         self.fmri
     }
 
-    pub fn is_fmri_needed_as_dependency(&self, components: &Components, fmri: &FMRI) -> Option<Vec<(FMRI, String, Dependency)>> {
+    pub fn is_fmri_needed_as_dependency(
+        &self,
+        components: &Components,
+        fmri: &FMRI,
+    ) -> Option<Vec<(FMRI, String, Dependency)>> {
         // TODO: what to do if a package is dependent on itself?
 
         let mut required_dependencies: Vec<(FMRI, String, Dependency)> = Vec::new();
 
-        if let Some(dependency) = self.get_runtime_dependencies_as_struct().is_fmri_needed_as_dependency(components, fmri) {
+        if let Some(dependency) = self
+            .get_runtime_dependencies_as_struct()
+            .is_fmri_needed_as_dependency(components, fmri)
+        {
             required_dependencies.push((self.clone().fmri(), "RUNTIME".to_owned(), dependency));
         }
 
-        if let Some(dependency) = self.get_build_dependencies_as_struct().is_fmri_needed_as_dependency(components, fmri) {
+        if let Some(dependency) = self
+            .get_build_dependencies_as_struct()
+            .is_fmri_needed_as_dependency(components, fmri)
+        {
             required_dependencies.push((self.clone().fmri(), "BUILD".to_owned(), dependency));
         }
 
-        if let Some(dependency) = self.get_test_dependencies_as_struct().is_fmri_needed_as_dependency(components, fmri) {
+        if let Some(dependency) = self
+            .get_test_dependencies_as_struct()
+            .is_fmri_needed_as_dependency(components, fmri)
+        {
             required_dependencies.push((self.clone().fmri(), "TEST".to_owned(), dependency));
         }
 
-        if let Some(dependency) = self.get_system_build_dependencies_as_struct().is_fmri_needed_as_dependency(components, fmri) {
-            required_dependencies.push((self.clone().fmri(), "SYSTEM-BUILD".to_owned(), dependency));
+        if let Some(dependency) = self
+            .get_system_build_dependencies_as_struct()
+            .is_fmri_needed_as_dependency(components, fmri)
+        {
+            required_dependencies.push((
+                self.clone().fmri(),
+                "SYSTEM-BUILD".to_owned(),
+                dependency,
+            ));
         }
 
-        if let Some(dependency) = self.get_system_test_dependencies_as_struct().is_fmri_needed_as_dependency(components, fmri) {
+        if let Some(dependency) = self
+            .get_system_test_dependencies_as_struct()
+            .is_fmri_needed_as_dependency(components, fmri)
+        {
             required_dependencies.push((self.clone().fmri(), "SYSTEM-TEST".to_owned(), dependency));
         }
 
-        if required_dependencies.len() == 0 {
+        if required_dependencies.is_empty() {
             return None;
         }
         Some(required_dependencies)
@@ -101,23 +121,23 @@ impl Package {
     }
 
     pub fn get_runtime_dependencies(&self) -> &Vec<Dependency> {
-        &self.runtime.get_ref()
+        self.runtime.get_ref()
     }
 
     pub fn get_build_dependencies(&self) -> &Vec<Dependency> {
-        &self.build.get_ref()
+        self.build.get_ref()
     }
 
     pub fn get_test_dependencies(&self) -> &Vec<Dependency> {
-        &self.test.get_ref()
+        self.test.get_ref()
     }
 
     pub fn get_system_build_dependencies(&self) -> &Vec<Dependency> {
-        &self.system_build.get_ref()
+        self.system_build.get_ref()
     }
 
     pub fn get_system_test_dependencies(&self) -> &Vec<Dependency> {
-        &self.system_test.get_ref()
+        self.system_test.get_ref()
     }
 
     pub fn add_runtime_dependencies(&mut self, dependencies: Dependencies) {

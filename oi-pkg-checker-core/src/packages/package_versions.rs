@@ -1,8 +1,7 @@
-use std::cmp::Ordering;
-use serde::{Deserialize, Serialize};
-use fmri::FMRI;
-use fmri::compare::Compare;
 use crate::packages::package::Package;
+use fmri::{compare::Compare, FMRI};
+use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 
 /// PackageVersions has 1 or more versions of package
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
@@ -39,7 +38,10 @@ impl PackageVersions {
     /// and now the new [`Package`]  can be added
     pub fn add_package(&mut self, package: Package) -> Option<()> {
         if package.is_obsolete() && package.is_renamed() {
-            panic!("package cannot be obsolete and renamed at the same time, package: {:?}", package)
+            panic!(
+                "package cannot be obsolete and renamed at the same time, package: {:?}",
+                package
+            )
         }
 
         if let Some(newer_package) = &self.get_newer_package() {
@@ -109,17 +111,15 @@ impl PackageVersions {
     /// Returns newer [`Package`] in [`PackageVersions`] if there is at least one
     pub fn get_newer_package(&self) -> Option<Package> {
         let packages = self.get_packages_ref();
-        if packages.len() == 0 {
+        if packages.is_empty() {
             return None;
         }
 
         let mut newer_package = packages[0].clone();
         for package in packages {
-            match newer_package.compare(&package) {
-                Ordering::Less => {
-                    newer_package = package.clone()
-                }
-                Ordering::Equal => {},
+            match newer_package.compare(package) {
+                Ordering::Less => newer_package = package.clone(),
+                Ordering::Equal => {}
                 Ordering::Greater => {}
             }
         }
@@ -130,7 +130,7 @@ impl PackageVersions {
     /// Removes [`Package`] from [`PackageVersions`]
     pub fn remove_package(&mut self, package_to_remove: &Package) {
         let packages = self.get_packages_ref_mut();
-        if packages.len() == 0 {
+        if packages.is_empty() {
             panic!("No package to remove, but at least one was expected to be there")
         }
 

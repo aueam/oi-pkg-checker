@@ -1,25 +1,17 @@
-use std::{env, fs::File, io::Read, path::PathBuf, process::exit};
+use crate::packages::{
+    component::Component, components::Components, depend_types::DependTypes,
+    dependencies::Dependencies, dependency::Dependency, package::Package,
+    package_versions::PackageVersions,
+};
+use crate::{problems::Problem::RenamedPackageInComponent, ComponentPackagesList, Problems};
+use fmri::{FMRIList, Publisher, Version, FMRI};
 use log::{debug, error};
 use serde_json::Value;
-use fmri::{
-    FMRI, Publisher,
-    Version, FMRIList,
-};
-use crate::{ComponentPackagesList, Problems};
-
-use crate::packages::component::Component;
-use crate::packages::components::Components;
-use crate::packages::dependencies::Dependencies;
-use crate::packages::dependency::Dependency;
-use crate::packages::depend_types::DependTypes;
-use crate::packages::package::Package;
-use crate::packages::package_versions::PackageVersions;
-use crate::problems::Problem::RenamedPackageInComponent;
-
+use std::{env, fs::File, io::Read, path::PathBuf, process::exit};
 
 #[derive(Debug)]
 enum Attribute {
-    FMRI(FMRI),
+    Fmri(FMRI),
     DType(String),
     Name(String),
     Value(String),
@@ -30,7 +22,7 @@ enum Attribute {
 struct Attributes(Vec<Attribute>);
 
 enum Results {
-    Dependency(DependTypes),
+    Dependency(Box<DependTypes>),
     Obsolete,
     Renamed,
     Other,
@@ -48,12 +40,14 @@ impl Attributes {
         let mut attributes = Self(vec![]);
 
         for attribute_value in attributes_string.split_whitespace() {
-            if !attribute_value.contains("=") {
+            if !attribute_value.contains('=') {
                 panic!("expected attribute, but it isn't!!! (attribute has \"=\")")
             }
-            let (attribute, value) = attribute_value.split_once("=").expect("bad attribute value");
+            let (attribute, value) = attribute_value
+                .split_once('=')
+                .expect("bad attribute value");
             let att = match attribute {
-                "fmri" => Attribute::FMRI(FMRI::parse_raw(&value.to_owned())),
+                "fmri" => Attribute::Fmri(FMRI::parse_raw(&value.to_owned())),
                 "type" => Attribute::DType(value.to_owned()),
                 "name" => Attribute::Name(value.to_owned()),
                 "value" => Attribute::Value(value.to_owned()),
@@ -72,9 +66,8 @@ impl Attributes {
 
     fn get_type_from_attributes(&self) -> &String {
         for attribute in self.get() {
-            match attribute {
-                Attribute::DType(d_type) => return d_type,
-                _ => {}
+            if let Attribute::DType(d_type) = attribute {
+                return d_type;
             }
         }
         panic!("in attributes is not type attribute!")
@@ -82,9 +75,8 @@ impl Attributes {
 
     fn get_name_from_attributes(&self) -> Option<&String> {
         for attribute in self.get() {
-            match attribute {
-                Attribute::Name(name) => return Some(name),
-                _ => {}
+            if let Attribute::Name(name) = attribute {
+                return Some(name);
             }
         }
         None
@@ -92,9 +84,8 @@ impl Attributes {
 
     fn get_value_from_attributes(&self) -> &String {
         for attribute in self.get() {
-            match attribute {
-                Attribute::Value(value) => return value,
-                _ => {}
+            if let Attribute::Value(value) = attribute {
+                return value;
             }
         }
         panic!("in attributes is not value attribute!")
@@ -102,9 +93,8 @@ impl Attributes {
 
     fn get_fmri_from_attributes(&self) -> FMRI {
         for attribute in self.get() {
-            match attribute {
-                Attribute::FMRI(fmri) => return fmri.clone(),
-                _ => {}
+            if let Attribute::Fmri(fmri) = attribute {
+                return fmri.clone();
             }
         }
         panic!("cant find fmri attribute")
@@ -112,9 +102,8 @@ impl Attributes {
 
     fn get_predicate_from_attributes(&self) -> FMRI {
         for attribute in self.get() {
-            match attribute {
-                Attribute::Predicate(fmri) => return fmri.clone(),
-                _ => {}
+            if let Attribute::Predicate(fmri) = attribute {
+                return fmri.clone();
             }
         }
         panic!("cant find fmri attribute")
@@ -144,9 +133,8 @@ fn parse_depend(depend: String) -> DependTypes {
         "require-any" => {
             let mut fmri_list = FMRIList::new();
             for attribute in attributes.get() {
-                match attribute {
-                    Attribute::FMRI(fmri) => fmri_list.add(fmri.clone()),
-                    _ => {}
+                if let Attribute::Fmri(fmri) = attribute {
+                    fmri_list.add(fmri.clone())
                 }
             }
             if fmri_list.is_empty() {
@@ -154,9 +142,12 @@ fn parse_depend(depend: String) -> DependTypes {
             }
             DependTypes::RequireAny(fmri_list)
         }
-        "conditional" => DependTypes::Conditional(attributes.get_fmri_from_attributes(), attributes.get_predicate_from_attributes()),
+        "conditional" => DependTypes::Conditional(
+            attributes.get_fmri_from_attributes(),
+            attributes.get_predicate_from_attributes(),
+        ),
         "group" => DependTypes::Group(attributes.get_fmri_from_attributes()),
-        _ => panic!("unknown depend type: {}", d_type)
+        _ => panic!("unknown depend type: {}", d_type),
     };
 }
 
@@ -171,10 +162,8 @@ fn parse_set(set: String) -> Name {
     match attributes.get_name_from_attributes() {
         None => panic!("\"name\" is not in attributes"),
         Some(name) => {
-            if name == "pkg.obsolete" {
-                if attributes.get_value_from_attributes() == "true" {
-                    return Name::Obsolete;
-                }
+            if name == "pkg.obsolete" && attributes.get_value_from_attributes() == "true" {
+                return Name::Obsolete;
             }
         }
     }
@@ -182,27 +171,25 @@ fn parse_set(set: String) -> Name {
     match attributes.get_name_from_attributes() {
         None => panic!("\"name\" is not in attributes"),
         Some(name) => {
-            if name == "pkg.renamed" {
-                if attributes.get_value_from_attributes() == "true" {
-                    return Name::Renamed;
-                }
+            if name == "pkg.renamed" && attributes.get_value_from_attributes() == "true" {
+                return Name::Renamed;
             }
         }
     }
 
-    return Name::Other;
+    Name::Other
 }
 
 fn parse_action(action: String) -> Results {
     if action.starts_with("depend") {
-        return Results::Dependency(parse_depend(action.clone()));
+        return Results::Dependency(Box::new(parse_depend(action.clone())));
     }
 
     if action.starts_with("set") {
         return match parse_set(action.clone()) {
             Name::Obsolete => Results::Obsolete,
             Name::Renamed => Results::Renamed,
-            Name::Other => Results::Other
+            Name::Other => Results::Other,
         };
     }
 
@@ -221,17 +208,22 @@ pub fn open_json_file(mut source_path: PathBuf) -> Value {
     }
 
     // open file
-    let mut file = File::open(source_path.clone()).expect(&format!("failed to open file {:?}", source_path));
+    let mut file = File::open(source_path.clone())
+        .unwrap_or_else(|_| panic!("failed to open file {:?}", source_path));
 
     // get content
     let mut contains = String::new();
-    file.read_to_string(&mut contains).expect("failed to read file");
+    file.read_to_string(&mut contains)
+        .expect("failed to read file");
 
     // parse json and return
     match serde_json::from_str::<Value>(&contains) {
-        Ok(json) => return json,
+        Ok(json) => json,
         Err(err) => {
-            error!("fatal invalid JSON found in {:?}, error: {}", source_path, err);
+            error!(
+                "fatal invalid JSON found in {:?}, error: {}",
+                source_path, err
+            );
             exit(1);
         }
     }
@@ -312,7 +304,7 @@ pub fn load_catalog_c(
                         if package.is_obsolete() {
                             for component_packages in package_names_in_pkg5_list.get() {
                                 for package_in_pkg5 in
-                                component_packages.packages_in_component.get_ref()
+                                    component_packages.packages_in_component.get_ref()
                                 {
                                     if package.fmri_ref().get_package_name_as_ref_string()
                                         == package_in_pkg5.get_package_name_as_ref_string()

@@ -1,5 +1,5 @@
-use std::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 
 /// Represents
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug, Ord, PartialOrd, Eq)]
@@ -13,15 +13,19 @@ pub enum DependencyTypes {
 }
 
 /// Implementation of [`Display`]
-impl Display for DependencyTypes{
+impl Display for DependencyTypes {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            DependencyTypes::Runtime => "runtime",
-            DependencyTypes::Build => "build",
-            DependencyTypes::Test => "test",
-            DependencyTypes::SystemBuild => "system-build",
-            DependencyTypes::SystemTest => "system-test",
-            DependencyTypes::None => "none",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                DependencyTypes::Runtime => "runtime",
+                DependencyTypes::Build => "build",
+                DependencyTypes::Test => "test",
+                DependencyTypes::SystemBuild => "system-build",
+                DependencyTypes::SystemTest => "system-test",
+                DependencyTypes::None => "none",
+            }
+        )
     }
 }

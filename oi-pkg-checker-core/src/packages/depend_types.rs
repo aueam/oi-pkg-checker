@@ -1,7 +1,6 @@
-use std::fmt::{Display, Formatter};
+use fmri::{fmri_list::FMRIList, FMRI};
 use serde::{Deserialize, Serialize};
-use fmri::FMRI;
-use fmri::fmri_list::FMRIList;
+use std::fmt::{Display, Formatter};
 
 /// Represents depend action type
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
@@ -15,7 +14,7 @@ pub enum DependTypes {
     Conditional(FMRI, FMRI),
     Origin(FMRI),
     Group(FMRI),
-    Parent(FMRI)
+    Parent(FMRI),
 }
 
 impl DependTypes {
@@ -23,33 +22,39 @@ impl DependTypes {
     pub fn get_name_and_content_as_string(self) -> (String, String) {
         match self {
             DependTypes::Require(fmri) => ("require".to_owned(), fmri.get_package_name_as_string()),
-            DependTypes::Optional(fmri) => ("optional".to_owned(), fmri.get_package_name_as_string()),
-            DependTypes::Incorporate(fmri) => ("incorporate".to_owned(), fmri.get_package_name_as_string()),
+            DependTypes::Optional(fmri) => {
+                ("optional".to_owned(), fmri.get_package_name_as_string())
+            }
+            DependTypes::Incorporate(fmri) => {
+                ("incorporate".to_owned(), fmri.get_package_name_as_string())
+            }
             DependTypes::RequireAny(fmri_list) => {
                 let mut string = String::new();
                 let len = fmri_list.get_ref().len();
                 for (index, fmri) in fmri_list.get_ref().iter().enumerate() {
                     string.push_str(fmri.get_package_name_as_ref_string());
-                    if index+1 < len {
+                    if index + 1 < len {
                         string.push_str(", ");
                     }
                 }
                 ("require-any".to_owned(), string)
-            },
+            }
             DependTypes::Conditional(fmri, predicate) => {
-
                 // TODO: remove this
                 if fmri.package_name_eq(&FMRI::parse_raw(&"none".to_owned())) {
-                    return ("conditional".to_owned(), format!("predicate={}", predicate))
+                    return ("conditional".to_owned(), format!("predicate={}", predicate));
                 }
                 if predicate.package_name_eq(&FMRI::parse_raw(&"none".to_owned())) {
-                    return ("conditional".to_owned(), format!("fmri={}", fmri))
+                    return ("conditional".to_owned(), format!("fmri={}", fmri));
                 }
 
-                ("conditional".to_owned(), format!("fmri={}, predicate={}", fmri, predicate))
-            },
+                (
+                    "conditional".to_owned(),
+                    format!("fmri={}, predicate={}", fmri, predicate),
+                )
+            }
             DependTypes::Group(fmri) => ("group".to_owned(), fmri.get_package_name_as_string()),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 
@@ -61,7 +66,7 @@ impl DependTypes {
             DependTypes::RequireAny(fmri_list) => Err(fmri_list),
             DependTypes::Conditional(fmri, _) => Ok(fmri),
             DependTypes::Group(fmri) => Ok(fmri),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 }
@@ -74,7 +79,9 @@ impl Display for DependTypes {
         match self {
             DependTypes::Require(fmri) => string.push_str(&format!("fmri={} type=require", fmri)),
             DependTypes::Optional(fmri) => string.push_str(&format!("fmri={} type=optional", fmri)),
-            DependTypes::Incorporate(fmri) => string.push_str(&format!("fmri={} type=incorporate", fmri)),
+            DependTypes::Incorporate(fmri) => {
+                string.push_str(&format!("fmri={} type=incorporate", fmri))
+            }
             DependTypes::RequireAny(fmri_list) => {
                 let mut tmp: String = "".to_owned();
                 for fmri in fmri_list.get_ref() {
@@ -83,9 +90,12 @@ impl Display for DependTypes {
                 tmp.push_str("type=require-any");
                 string.push_str(&tmp);
             }
-            DependTypes::Conditional(fmri, predicate) => string.push_str(&format!("fmri={} predicate={} type=conditional", fmri, predicate)),
+            DependTypes::Conditional(fmri, predicate) => string.push_str(&format!(
+                "fmri={} predicate={} type=conditional",
+                fmri, predicate
+            )),
             DependTypes::Group(fmri) => string.push_str(&format!("fmri={} type=group", fmri)),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
 
         write!(f, "{}", string)

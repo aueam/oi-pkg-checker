@@ -1,9 +1,9 @@
-pub mod components;
 pub mod component;
-pub mod package_versions;
-pub mod package;
-pub mod depend_types;
-pub mod dependency;
-pub mod dependencies;
-pub mod dependency_type;
+pub mod components;
 mod cycles;
+pub mod depend_types;
+pub mod dependencies;
+pub mod dependency;
+pub mod dependency_type;
+pub mod package;
+pub mod package_versions;

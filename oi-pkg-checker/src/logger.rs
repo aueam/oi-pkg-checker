@@ -1,4 +1,5 @@
 use std::process::exit;
+
 use colored::Colorize;
 use log::{Level, Log, Metadata, Record};
 
@@ -15,26 +16,35 @@ impl Log for Logger {
                 Level::Error => {
                     let msg = record.args().to_string();
                     if msg.starts_with("fatal ") {
-                        println!("{} {}", format!("[FATAL]").red().bold(), msg.trim_start_matches("fatal ").red().bold());
+                        println!(
+                            "{} {}",
+                            "[FATAL]".to_string().red().bold(),
+                            msg.trim_start_matches("fatal ").red().bold()
+                        );
                         exit(1);
                     } else {
-                        (format!("[ERROR]").red(), format!("{}", msg).red())
+                        ("[ERROR]".to_string().red(), msg.to_string().red())
                     }
                 }
-                Level::Warn => {
-                    (format!("[WARN]").bright_yellow(), format!("{}", record.args()).bright_yellow())
-                }
-                Level::Info => {
-                    (format!("[INFO]").bright_green(), format!("{}", record.args()).bright_green())
-                }
-                Level::Debug => {
-                    (format!("[DEBUG]").blue(), format!("{}", record.args()).blue())
-                }
-                Level::Trace => unimplemented!()
+                Level::Warn => (
+                    "[WARN]".to_string().bright_yellow(),
+                    format!("{}", record.args()).bright_yellow(),
+                ),
+                Level::Info => (
+                    "[INFO]".to_string().bright_green(),
+                    format!("{}", record.args()).bright_green(),
+                ),
+                Level::Debug => (
+                    "[DEBUG]".to_string().blue(),
+                    format!("{}", record.args()).blue(),
+                ),
+                Level::Trace => unimplemented!(),
             };
 
             println!("{} {}", level, message);
         }
     }
-    fn flush(&self) { unimplemented!() }
+    fn flush(&self) {
+        unimplemented!()
+    }
 }

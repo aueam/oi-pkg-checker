@@ -1,21 +1,21 @@
-use std::{
-    fs::File,
-    io::{Read, Write},
-    path::{Path, PathBuf},
+use crate::{
+    packages::{
+        components::Components, depend_types::DependTypes, dependency_type::DependencyTypes,
+    },
+    problems::Problem::{
+        MissingComponentForPackage, NonExistingRequiredPackage, ObsoletedPackageInComponent,
+        ObsoletedRequiredPackage, PartlyObsoletedRequiredPackage, RenamedNeedsRenamed,
+        RenamedPackageInComponent, UnRunnableMakeCommand, UselessComponent,
+    },
 };
-
 use bincode::{deserialize, serialize};
 use fmri::FMRI;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
-
-use crate::packages::{
-    components::Components, depend_types::DependTypes, dependency_type::DependencyTypes,
-};
-use crate::problems::Problem::{
-    MissingComponentForPackage, NonExistingRequiredPackage, ObsoletedPackageInComponent,
-    ObsoletedRequiredPackage, PartlyObsoletedRequiredPackage, RenamedNeedsRenamed,
-    RenamedPackageInComponent, UnRunnableMakeCommand, UselessComponent,
+use std::{
+    fs::File,
+    io::{Read, Write},
+    path::{Path, PathBuf},
 };
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -36,12 +36,6 @@ pub enum Problem {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Problems(Vec<Problem>);
-
-impl Default for Problems {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 impl Problems {
     pub fn new() -> Self {
@@ -162,6 +156,12 @@ impl Problems {
                 _ => panic!("invalid problem type"),
             }
         }
+    }
+}
+
+impl Default for Problems {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

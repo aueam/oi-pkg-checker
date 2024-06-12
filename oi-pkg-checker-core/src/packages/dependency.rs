@@ -1,12 +1,15 @@
+use crate::{
+    packages::{
+        components::Components, depend_types::DependTypes, dependency_type::DependencyTypes,
+        package::Package,
+    },
+    problems::Problem::{
+        NonExistingRequiredPackage, ObsoletedRequiredPackage, PartlyObsoletedRequiredPackage,
+    },
+    Problems,
+};
+use fmri::{fmri_list::FMRIList, FMRI};
 use serde::{Deserialize, Serialize};
-use fmri::FMRI;
-use fmri::fmri_list::FMRIList;
-use crate::packages::components::Components;
-use crate::packages::depend_types::DependTypes;
-use crate::packages::dependency_type::DependencyTypes;
-use crate::packages::package::Package;
-use crate::Problems;
-use crate::problems::Problem::{NonExistingRequiredPackage, ObsoletedRequiredPackage, PartlyObsoletedRequiredPackage};
 
 /// Represents depend action, it contains [`DependTypes`], all [`FMRIs`][`FMRI`] in it are without [`Publisher`]
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
@@ -30,7 +33,7 @@ impl Dependency {
                 predicate.remove_publisher();
             }
             DependTypes::Group(fmri) => fmri.remove_publisher(),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
 
         Self(d_type.clone())

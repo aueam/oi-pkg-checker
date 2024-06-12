@@ -1,13 +1,9 @@
-use std::cmp::Ordering;
-use std::fmt::Debug;
-use std::ops::AddAssign;
+use std::{cmp::Ordering, fmt::Debug, ops::AddAssign};
+
+use fmri::{fmri_list::FMRIList, Compare, FMRI};
 use serde::{Deserialize, Serialize};
-use fmri::FMRI;
-use fmri::fmri_list::FMRIList;
-use fmri::Compare;
-use crate::packages::components::Components;
-use crate::packages::dependency::Dependency;
-use crate::packages::depend_types::DependTypes;
+
+use crate::packages::{components::Components, depend_types::DependTypes, dependency::Dependency};
 
 /// Represents more [dependencies][Dependency]
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
@@ -24,7 +20,7 @@ impl Dependencies {
         let mut dependencies = Self::new();
 
         for fmri in fmri_list.get() {
-            dependencies.add(Dependency::new(&mut DependTypes::Require(fmri)))
+            dependencies.add(Dependency::new(&DependTypes::Require(fmri)))
         }
 
         dependencies
@@ -46,7 +42,11 @@ impl Dependencies {
     }
 
     /// Checks if inserted [`FMRI`] is needed in [`self`] as [`Dependency`]
-    pub fn is_fmri_needed_as_dependency(&self, components: &Components, checking_fmri: &FMRI) -> Option<Dependency> {
+    pub fn is_fmri_needed_as_dependency(
+        &self,
+        components: &Components,
+        checking_fmri: &FMRI,
+    ) -> Option<Dependency> {
         for dependency in self.get_ref() {
             match dependency.get_ref() {
                 DependTypes::Require(fmri) => {
@@ -94,7 +94,7 @@ impl Dependencies {
                     }
                     // dependency is type group, but other conditions are not met
                 }
-                _ => unimplemented!()
+                _ => unimplemented!(),
             };
         }
 
@@ -113,7 +113,12 @@ impl Dependencies {
     }
 }
 
-/// Implementation of [AddAssign] for [`Dependencies`]
+impl Default for Dependencies {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AddAssign for Dependencies {
     /// Implements += operator for [`Dependencies`]
     ///

@@ -1,21 +1,21 @@
+use crate::{
+    assets::catalogs_c::open_json_file,
+    problems::{
+        Problem::{
+            MissingComponentForPackage, ObsoletedPackageInComponent, RenamedPackageInComponent,
+            UnRunnableMakeCommand,
+        },
+        Problems,
+    },
+    Components, Dependencies, DependencyTypes,
+    DependencyTypes::{Build, SystemBuild, SystemTest, Test},
+    PackageVersions,
+};
+use fmri::{fmri_list::FMRIList, FMRI};
 use std::{
     path::{Path, PathBuf},
     process::Command,
 };
-
-use fmri::{FMRI, fmri_list::FMRIList};
-
-use crate::{
-    assets::catalogs_c::open_json_file,
-    Components,
-    Dependencies, DependencyTypes, DependencyTypes::{Build, SystemBuild, SystemTest, Test},
-    PackageVersions,
-    problems::{
-        Problem::{MissingComponentForPackage, RenamedPackageInComponent, UnRunnableMakeCommand},
-        Problems,
-    },
-};
-use crate::problems::Problem::ObsoletedPackageInComponent;
 
 #[derive(Clone, Debug)]
 pub struct ComponentPackagesList(Vec<ComponentPackages>);
@@ -31,7 +31,7 @@ impl ComponentPackagesList {
     pub fn new(oi_userland_components: &Path) -> Self {
         let components_path = oi_userland_components.to_string_lossy();
 
-        let a = Command::new("sh")
+        let _output = Command::new("sh")
             .arg("-c")
             .arg(format!(
                 "cd {} && rm -f components.mk ; gmake COMPONENTS_IGNORE=/dev/null components.mk",
@@ -67,12 +67,12 @@ impl ComponentPackagesList {
                     path_to_component.clone().to_string_lossy()
                 )), // pkg5 location
             )
-                .as_object()
-                .expect("expect object")
-                .get("fmris")
-                .expect("expect fmris")
-                .as_array()
-                .expect("expect array")
+            .as_object()
+            .expect("expect object")
+            .get("fmris")
+            .expect("expect fmris")
+            .as_array()
+            .expect("expect array")
             {
                 packages_in_component.add(FMRI::parse_raw(
                     &fmri.as_str().expect("expect string").to_owned(),
