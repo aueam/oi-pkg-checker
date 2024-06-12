@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use fmri::{fmri_list::FMRIList, FMRI};
+use fmri::{FMRI, fmri_list::FMRIList};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -8,11 +8,11 @@ use crate::{
         components::Components, depend_types::DependTypes, dependency_type::DependencyTypes,
         package::Package,
     },
+    Problems,
     problems::Problem::{
         NonExistingRequired, NonExistingRequiredByRenamed, ObsoletedRequired,
         ObsoletedRequiredByRenamed, PartlyObsoletedRequired, PartlyObsoletedRequiredByRenamed,
     },
-    Problems,
 };
 
 /// Represents depend action, it contains [`DependTypes`], all [`FMRIs`][`FMRI`] in it are without [`Publisher`]
@@ -70,6 +70,10 @@ impl Dependency {
 
         let obsoleted = |d_type: DependTypes| {
             let package_fmri = package.clone().fmri();
+
+            if components.is_fmri_obsoleted(&package_fmri) {
+                return;
+            }
 
             problems.borrow_mut().add_problem(if package.is_renamed() {
                 ObsoletedRequiredByRenamed(d_type, dependency_type.clone(), package_fmri)
