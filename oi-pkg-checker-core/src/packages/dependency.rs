@@ -1,18 +1,19 @@
+use fmri::{FMRI, fmri_list::FMRIList};
+use serde::{Deserialize, Serialize};
+
 use crate::{
     packages::{
         components::Components, depend_types::DependTypes, dependency_type::DependencyTypes,
         package::Package,
     },
+    Problems,
     problems::Problem::{
         NonExistingRequiredPackage, ObsoletedRequiredPackage, PartlyObsoletedRequiredPackage,
     },
-    Problems,
 };
-use fmri::{fmri_list::FMRIList, FMRI};
-use serde::{Deserialize, Serialize};
 
 /// Represents depend action, it contains [`DependTypes`], all [`FMRIs`][`FMRI`] in it are without [`Publisher`]
-#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Dependency(DependTypes);
 
 impl Dependency {
@@ -177,7 +178,7 @@ impl Dependency {
                         problems.add_problem(ObsoletedRequiredPackage(
                             DependTypes::Conditional(
                                 fmri.clone(),
-                                FMRI::parse_raw(&"none".to_owned()),
+                                FMRI::parse_raw("none").unwrap(),
                             ),
                             dependency_type.clone(),
                             package.clone().fmri(),
@@ -187,7 +188,7 @@ impl Dependency {
                         problems.add_problem(PartlyObsoletedRequiredPackage(
                             DependTypes::Conditional(
                                 fmri.clone(),
-                                FMRI::parse_raw(&"none".to_owned()),
+                                FMRI::parse_raw("none").unwrap(),
                             ),
                             dependency_type.clone(),
                             package.clone().fmri(),
@@ -196,7 +197,7 @@ impl Dependency {
                     }
                 } else if !components.check_if_fmri_exists_as_package(fmri) {
                     problems.add_problem(NonExistingRequiredPackage(
-                        DependTypes::Conditional(fmri.clone(), FMRI::parse_raw(&"none".to_owned())),
+                        DependTypes::Conditional(fmri.clone(), FMRI::parse_raw("none").unwrap()),
                         dependency_type.clone(),
                         package.clone().fmri(),
                         package.is_renamed(),
@@ -207,7 +208,7 @@ impl Dependency {
                     if !components.check_if_fmri_exists_as_package(predicate) {
                         problems.add_problem(ObsoletedRequiredPackage(
                             DependTypes::Conditional(
-                                FMRI::parse_raw(&"none".to_owned()),
+                                FMRI::parse_raw("none").unwrap(),
                                 predicate.clone(),
                             ),
                             dependency_type.clone(),
@@ -217,7 +218,7 @@ impl Dependency {
                     } else {
                         problems.add_problem(PartlyObsoletedRequiredPackage(
                             DependTypes::Conditional(
-                                FMRI::parse_raw(&"none".to_owned()),
+                                FMRI::parse_raw("none").unwrap(),
                                 predicate.clone(),
                             ),
                             dependency_type.clone(),
@@ -228,7 +229,7 @@ impl Dependency {
                 } else if !components.check_if_fmri_exists_as_package(predicate) {
                     problems.add_problem(NonExistingRequiredPackage(
                         DependTypes::Conditional(
-                            FMRI::parse_raw(&"none".to_owned()),
+                            FMRI::parse_raw("none").unwrap(),
                             predicate.clone(),
                         ),
                         dependency_type.clone(),

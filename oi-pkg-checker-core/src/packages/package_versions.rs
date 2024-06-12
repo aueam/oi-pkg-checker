@@ -1,7 +1,9 @@
-use crate::packages::package::Package;
-use fmri::{compare::Compare, FMRI};
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+
+use fmri::FMRI;
+use serde::{Deserialize, Serialize};
+
+use crate::packages::package::Package;
 
 /// PackageVersions has 1 or more versions of package
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
@@ -45,7 +47,7 @@ impl PackageVersions {
         }
 
         if let Some(newer_package) = &self.get_newer_package() {
-            match package.compare(newer_package) {
+            match package.cmp(newer_package) {
                 Ordering::Less => todo!("package is older than newer one"),
                 Ordering::Greater | Ordering::Equal => {}
             }
@@ -117,7 +119,7 @@ impl PackageVersions {
 
         let mut newer_package = packages[0].clone();
         for package in packages {
-            match newer_package.compare(package) {
+            match newer_package.cmp(package) {
                 Ordering::Less => newer_package = package.clone(),
                 Ordering::Equal => {}
                 Ordering::Greater => {}
@@ -135,7 +137,7 @@ impl PackageVersions {
         }
 
         for (index, package) in packages.iter().enumerate() {
-            match package.compare(package_to_remove) {
+            match package.cmp(package_to_remove) {
                 // finding exact same package to remove
                 Ordering::Equal => {
                     packages.remove(index);

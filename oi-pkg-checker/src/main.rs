@@ -8,7 +8,7 @@ use fmri::FMRI;
 use log::{debug, error, info, LevelFilter};
 
 use oi_pkg_checker_core::{
-    report, AssetTypes, ComponentPackagesList, Components, DependTypes, PackageVersions, Problems,
+    AssetTypes, ComponentPackagesList, Components, DependTypes, PackageVersions, Problems, report,
 };
 
 use crate::{
@@ -44,7 +44,7 @@ fn main() {
             Commands::CheckFMRI { fmri, debug } => {
                 debug_on(debug);
 
-                let fmri = &FMRI::parse_raw(fmri);
+                let fmri = &FMRI::parse_raw(fmri).unwrap();
 
                 let components = match Path::new(data_path).exists() {
                     false => {

@@ -1,10 +1,10 @@
-use crate::packages::{components::Components, dependencies::Dependencies, dependency::Dependency};
-use fmri::{compare::Compare, FMRI};
+use fmri::FMRI;
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
+
+use crate::packages::{components::Components, dependencies::Dependencies, dependency::Dependency};
 
 /// Package contains dependencies
-#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Package {
     fmri: FMRI,
     obsolete: bool,
@@ -158,11 +158,5 @@ impl Package {
 
     pub fn add_system_test_dependencies(&mut self, dependencies: Dependencies) {
         self.system_test += dependencies
-    }
-}
-
-impl Compare for Package {
-    fn compare(&self, comparing_to: &Self) -> Ordering {
-        self.fmri_ref().compare(comparing_to.fmri_ref())
     }
 }

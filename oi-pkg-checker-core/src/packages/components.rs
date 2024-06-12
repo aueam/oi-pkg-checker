@@ -1,26 +1,28 @@
-use crate::{
-    assets::{
-        assets_types::AssetTypes,
-        catalogs_c::load_catalog_c,
-        open_indiana_oi_userland_git::{component_list, load_dependencies, ComponentPackagesList},
-    },
-    packages::{
-        component::Component, dependencies::Dependencies, dependency::Dependency,
-        dependency_type::DependencyTypes, package_versions::PackageVersions,
-    },
-    problems::Problem::{RenamedNeedsRenamed, UselessComponent},
-    Problems,
-};
-use bincode::{deserialize, serialize};
-use fmri::{compare::Compare, fmri_list::FMRIList, FMRI};
-use log::{debug, info};
-use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
     fmt::{Display, Formatter},
     fs::File,
     io::{Read, Write},
     path::Path,
+};
+
+use bincode::{deserialize, serialize};
+use fmri::{FMRI, fmri_list::FMRIList};
+use log::{debug, info};
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    assets::{
+        assets_types::AssetTypes,
+        catalogs_c::load_catalog_c,
+        open_indiana_oi_userland_git::{component_list, ComponentPackagesList, load_dependencies},
+    },
+    packages::{
+        component::Component, dependencies::Dependencies, dependency::Dependency,
+        dependency_type::DependencyTypes, package_versions::PackageVersions,
+    },
+    Problems,
+    problems::Problem::{RenamedNeedsRenamed, UselessComponent},
 };
 
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
@@ -262,7 +264,7 @@ impl Components {
         for component in self.get_ref() {
             for package_version in component.get_versions_ref() {
                 for package in package_version.get_packages_ref() {
-                    if package.fmri_ref().package_name_ne(fmri) {
+                    if !package.fmri_ref().package_name_eq(fmri) {
                         match package.is_fmri_needed_as_dependency(self, fmri) {
                             None => {}
                             Some(_) => return true,
@@ -320,7 +322,7 @@ impl Components {
         for component in self.get_ref() {
             for package_version in component.get_versions_ref() {
                 for package in package_version.get_packages_ref() {
-                    if package.fmri_ref().package_name_ne(fmri) {
+                    if !package.fmri_ref().package_name_eq(fmri) {
                         if let Some(dependencies) = package.is_fmri_needed_as_dependency(self, fmri)
                         {
                             for (fmri, d_type, dependency) in dependencies {
@@ -423,7 +425,7 @@ impl Components {
                 if package_version.fmri_ref().package_name_eq(fmri) {
                     for package in package_version.get_packages_ref() {
                         let self_fmri = package.fmri_ref().clone();
-                        match fmri.compare(package.fmri_ref()) {
+                        match fmri.cmp(package.fmri_ref()) {
                             Ordering::Less => {
                                 return Some(self_fmri);
                             }
@@ -438,7 +440,7 @@ impl Components {
 
     pub fn check_require_dependency(&self, fmri: &FMRI, checking_fmri: &FMRI) -> bool {
         if fmri.package_name_eq(checking_fmri) {
-            match fmri.compare(checking_fmri) {
+            match fmri.cmp(checking_fmri) {
                 Ordering::Equal | Ordering::Less => {
                     return self.is_there_newer_version(checking_fmri).is_none();
                 }

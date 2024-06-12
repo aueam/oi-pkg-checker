@@ -1,12 +1,12 @@
 use std::{cmp::Ordering, fmt::Debug, ops::AddAssign};
 
-use fmri::{fmri_list::FMRIList, Compare, FMRI};
+use fmri::{FMRI, fmri_list::FMRIList};
 use serde::{Deserialize, Serialize};
 
 use crate::packages::{components::Components, depend_types::DependTypes, dependency::Dependency};
 
 /// Represents more [dependencies][Dependency]
-#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Dependencies(Vec<Dependency>);
 
 impl Dependencies {
@@ -63,7 +63,7 @@ impl Dependencies {
                 }
                 DependTypes::Incorporate(fmri) => {
                     if fmri.package_name_eq(checking_fmri) {
-                        match fmri.compare(checking_fmri) {
+                        match fmri.cmp(checking_fmri) {
                             // incorporate need exact same version
                             Ordering::Equal => {
                                 return Some(dependency.clone());

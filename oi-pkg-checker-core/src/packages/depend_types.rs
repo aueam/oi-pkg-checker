@@ -1,9 +1,10 @@
-use fmri::{fmri_list::FMRIList, FMRI};
-use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
+use fmri::{FMRI, fmri_list::FMRIList};
+use serde::{Deserialize, Serialize};
+
 /// Represents depend action type
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub enum DependTypes {
     Require(FMRI),
     Optional(FMRI),
@@ -41,10 +42,10 @@ impl DependTypes {
             }
             DependTypes::Conditional(fmri, predicate) => {
                 // TODO: remove this
-                if fmri.package_name_eq(&FMRI::parse_raw(&"none".to_owned())) {
+                if fmri.package_name_eq(&FMRI::parse_raw("none").unwrap()) {
                     return ("conditional".to_owned(), format!("predicate={}", predicate));
                 }
-                if predicate.package_name_eq(&FMRI::parse_raw(&"none".to_owned())) {
+                if predicate.package_name_eq(&FMRI::parse_raw("none").unwrap()) {
                     return ("conditional".to_owned(), format!("fmri={}", fmri));
                 }
 

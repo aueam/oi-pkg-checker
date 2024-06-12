@@ -1,5 +1,15 @@
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
+
+use fmri::{FMRI, fmri_list::FMRIList};
+
 use crate::{
     assets::catalogs_c::open_json_file,
+    Components,
+    Dependencies, DependencyTypes, DependencyTypes::{Build, SystemBuild, SystemTest, Test},
+    PackageVersions,
     problems::{
         Problem::{
             MissingComponentForPackage, ObsoletedPackageInComponent, RenamedPackageInComponent,
@@ -7,14 +17,6 @@ use crate::{
         },
         Problems,
     },
-    Components, Dependencies, DependencyTypes,
-    DependencyTypes::{Build, SystemBuild, SystemTest, Test},
-    PackageVersions,
-};
-use fmri::{fmri_list::FMRIList, FMRI};
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
 };
 
 #[derive(Clone, Debug)]
@@ -74,9 +76,8 @@ impl ComponentPackagesList {
             .as_array()
             .expect("expect array")
             {
-                packages_in_component.add(FMRI::parse_raw(
-                    &fmri.as_str().expect("expect string").to_owned(),
-                ))
+                packages_in_component
+                    .add(FMRI::parse_raw(fmri.as_str().expect("expect string")).unwrap())
             }
 
             component_packages_list.0.push(ComponentPackages {
@@ -169,19 +170,12 @@ impl ComponentPackagesList {
 
         let binding = String::from_utf8(command.stdout).unwrap();
 
-        // TODO: use this when fmri is newer than 2.0.0
-        // let fmri_list: Vec<FMRI> = binding
-        //     .trim()
-        //     .split_whitespace()
-        //     .map(|fmri| FMRI::parse_raw(&fmri.to_owned()))
-        //     .collect();
+        let fmri_list: Vec<FMRI> = binding
+            .split_whitespace()
+            .map(|fmri| FMRI::parse_raw(fmri).unwrap())
+            .collect();
 
-        let mut fmri_list = FMRIList::new();
-        for fmri in binding.split_whitespace() {
-            fmri_list.add(FMRI::parse_raw(&fmri.to_owned()))
-        }
-
-        Ok(fmri_list)
+        Ok(FMRIList::from(fmri_list))
     }
 }
 

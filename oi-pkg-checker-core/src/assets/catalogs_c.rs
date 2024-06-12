@@ -1,13 +1,15 @@
+use std::{env, fs::File, io::Read, path::PathBuf, process::exit};
+
+use fmri::{FMRI, FMRIList, Publisher, Version};
+use log::{debug, error};
+use serde_json::Value;
+
+use crate::{ComponentPackagesList, Problems, problems::Problem::RenamedPackageInComponent};
 use crate::packages::{
     component::Component, components::Components, depend_types::DependTypes,
     dependencies::Dependencies, dependency::Dependency, package::Package,
     package_versions::PackageVersions,
 };
-use crate::{problems::Problem::RenamedPackageInComponent, ComponentPackagesList, Problems};
-use fmri::{FMRIList, Publisher, Version, FMRI};
-use log::{debug, error};
-use serde_json::Value;
-use std::{env, fs::File, io::Read, path::PathBuf, process::exit};
 
 #[derive(Debug)]
 enum Attribute {
@@ -47,11 +49,11 @@ impl Attributes {
                 .split_once('=')
                 .expect("bad attribute value");
             let att = match attribute {
-                "fmri" => Attribute::Fmri(FMRI::parse_raw(&value.to_owned())),
+                "fmri" => Attribute::Fmri(FMRI::parse_raw(value).unwrap()),
                 "type" => Attribute::DType(value.to_owned()),
                 "name" => Attribute::Name(value.to_owned()),
                 "value" => Attribute::Value(value.to_owned()),
-                "predicate" => Attribute::Predicate(FMRI::parse_raw(&value.to_owned())),
+                "predicate" => Attribute::Predicate(FMRI::parse_raw(value).unwrap()),
                 _ => {
                     debug!("Unknown attribute found: {} value: {}", attribute, value);
                     Attribute::Other(attribute.to_owned(), value.to_owned())
@@ -248,8 +250,8 @@ pub fn load_catalog_c(
         // for package_name(String), package_versions(Object) in packages
         for (package_name, package_versions) in packages.as_object().expect("expected object") {
             // create fmri of package
-            let mut fmri = FMRI::parse_raw(package_name);
-            fmri.change_publisher(Publisher::new(publisher.clone()));
+            let mut fmri = FMRI::parse_raw(package_name).unwrap();
+            fmri.change_publisher(Publisher::new(publisher.clone()).unwrap());
 
             // create package_versions with above fmri
             let mut versions = PackageVersions::new(fmri.clone());
@@ -279,9 +281,9 @@ pub fn load_catalog_c(
                     } else if key == "version" {
                         // get version of current package_version
                         // it is changing on every package_version (will be used in *)
-                        fmri.change_version(Version::new(
-                            value.clone().as_str().expect("str").to_string(),
-                        ));
+                        fmri.change_version(
+                            Version::new(value.clone().as_str().expect("str").to_string()).unwrap(),
+                        );
                     } else {
                         panic!("unknown key: {}", key)
                     }
