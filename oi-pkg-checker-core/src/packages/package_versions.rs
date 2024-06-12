@@ -48,7 +48,11 @@ impl PackageVersions {
 
         if let Some(newer_package) = &self.get_newer_package() {
             match package.cmp(newer_package) {
-                Ordering::Less => todo!("package is older than newer one"),
+                Ordering::Less => todo!(
+                    "package {:#?} is older than newer one ({:#?})",
+                    package.fmri(),
+                    newer_package.clone().fmri()
+                ),
                 Ordering::Greater | Ordering::Equal => {}
             }
         }

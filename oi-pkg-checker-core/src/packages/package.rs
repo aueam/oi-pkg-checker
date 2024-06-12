@@ -1,10 +1,12 @@
+use std::cmp::Ordering;
+
 use fmri::FMRI;
 use serde::{Deserialize, Serialize};
 
 use crate::packages::{components::Components, dependencies::Dependencies, dependency::Dependency};
 
 /// Package contains dependencies
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct Package {
     fmri: FMRI,
     obsolete: bool,
@@ -158,5 +160,18 @@ impl Package {
 
     pub fn add_system_test_dependencies(&mut self, dependencies: Dependencies) {
         self.system_test += dependencies
+    }
+}
+
+impl PartialOrd<Self> for Package {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Package {
+    /// Compares versions of FMRI
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.fmri.cmp(&other.fmri)
     }
 }
