@@ -11,30 +11,21 @@ use serde::{Serialize, Deserialize};
 use bincode::{serialize, deserialize};
 use fmri::{FMRI, fmri_list::FMRIList, compare::Compare};
 
-use crate::{
-    assets::{
-        assets_types::AssetTypes,
-        catalogs_c::load_catalog_c,
-        open_indiana_oi_userland_git::{
-            build_dependencies, component_list, ComponentPackagesList,
-            system_build_dependencies, system_test_dependencies, test_dependencies
-        }
+use crate::{assets::{
+    assets_types::AssetTypes,
+    catalogs_c::load_catalog_c,
+    open_indiana_oi_userland_git::{
+        component_list, ComponentPackagesList,
     },
-    packages::{
-        component::Component,
-        package_versions::PackageVersions,
-        dependencies::{Dependencies},
-        dependency::Dependency,
-        dependency_type::DependencyTypes
-    },
-    problems::{
-        MissingComponentForPackageList, NonExistingRequiredPackageList,
-        ObsoletedRequiredPackageList, PartlyObsoletedRequiredPackageList,
-        ProblemList, RenamedPackageInComponentList,
-        UnRunnableMakeCommandList, UselessComponents, UselessComponentsList
-    }
-};
-use crate::problems::{RenamedNeedsRenamed, RenamedNeedsRenamedList};
+}, packages::{
+    component::Component,
+    package_versions::PackageVersions,
+    dependencies::{Dependencies},
+    dependency::Dependency,
+    dependency_type::DependencyTypes,
+}, Problems};
+use crate::assets::open_indiana_oi_userland_git::load_dependencies;
+use crate::problems::Problem::{RenamedNeedsRenamed, UselessComponent};
 
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
 pub struct Components {
@@ -50,80 +41,41 @@ impl Components {
         }
     }
 
-    pub fn load(
-        &mut self,
-        asset: AssetTypes,
-        oi_userland_components: &PathBuf,
-    ) -> Result<(), Result<RenamedPackageInComponentList, (MissingComponentForPackageList, RenamedPackageInComponentList, UnRunnableMakeCommandList)>> {
+    pub fn load(&mut self, problems: &mut Problems, asset: AssetTypes, oi_userland_components: &Path) {
         let component_packages_list = ComponentPackagesList::new(oi_userland_components);
 
         match asset {
             AssetTypes::Catalogs(paths) => {
-                let mut renamed_package_in_component_list = RenamedPackageInComponentList::new();
                 for path in paths {
-                    renamed_package_in_component_list += load_catalog_c(
-                        self,
-                        path,
-                        &component_packages_list
-                    );
+                    load_catalog_c(self, path, problems, &component_packages_list);
                 }
-
-                Err(Ok(renamed_package_in_component_list))
             }
             AssetTypes::OpenIndianaOiUserlandGit => {
-                let mut missing_component_for_package_list = MissingComponentForPackageList::new();
-                let mut renamed_package_in_component_list = RenamedPackageInComponentList::new();
-                let mut un_runnable_make_command_list = UnRunnableMakeCommandList::new();
-
-                match component_list(self, component_packages_list.clone()) {
-                    Ok(_) => {}
-                    Err((missing, renamed)) => {
-                        missing_component_for_package_list += missing;
-                        renamed_package_in_component_list += renamed;
-                    }
-                }
-
-                match build_dependencies(self, component_packages_list.clone()) {
-                    Ok(_) => {}
-                    Err((missing, renamed, un_runnable)) => {
-                        missing_component_for_package_list += missing;
-                        renamed_package_in_component_list += renamed;
-                        un_runnable_make_command_list += un_runnable;
-                    }
-                }
-
-                match test_dependencies(self, component_packages_list.clone()) {
-                    Ok(_) => {}
-                    Err((missing, renamed, un_runnable)) => {
-                        missing_component_for_package_list += missing;
-                        renamed_package_in_component_list += renamed;
-                        un_runnable_make_command_list += un_runnable;
-                    }
-                }
-
-                match system_build_dependencies(self, component_packages_list.clone()) {
-                    Ok(_) => {}
-                    Err((missing, renamed, un_runnable)) => {
-                        missing_component_for_package_list += missing;
-                        renamed_package_in_component_list += renamed;
-                        un_runnable_make_command_list += un_runnable;
-                    }
-                }
-
-                match system_test_dependencies(self, component_packages_list) {
-                    Ok(_) => {}
-                    Err((missing, renamed, un_runnable)) => {
-                        missing_component_for_package_list += missing;
-                        renamed_package_in_component_list += renamed;
-                        un_runnable_make_command_list += un_runnable;
-                    }
-                }
-
-                if !missing_component_for_package_list.is_empty() || !un_runnable_make_command_list.is_empty() || !renamed_package_in_component_list.is_empty() {
-                    return Err(Err((missing_component_for_package_list, renamed_package_in_component_list, un_runnable_make_command_list)));
-                }
-
-                Ok(())
+                component_list(self, problems, &component_packages_list);
+                load_dependencies(
+                    self,
+                    problems,
+                    &component_packages_list,
+                    &DependencyTypes::Build,
+                );
+                load_dependencies(
+                    self,
+                    problems,
+                    &component_packages_list,
+                    &DependencyTypes::Test,
+                );
+                load_dependencies(
+                    self,
+                    problems,
+                    &component_packages_list,
+                    &DependencyTypes::SystemBuild,
+                );
+                load_dependencies(
+                    self,
+                    problems,
+                    &component_packages_list,
+                    &DependencyTypes::SystemTest,
+                );
             }
         }
     }
@@ -175,58 +127,48 @@ impl Components {
         }
     }
 
-    pub fn get_useless_components(&self) -> Result<(), UselessComponentsList> {
-        let mut useless_component_names = UselessComponentsList::new();
-
+    pub fn get_useless_components(&self, problems: &mut Problems) {
         for component in self.get_ref() {
             if component.get_name_ref() == "" {
                 continue;
             }
 
-            let mut number_of_components = component.get_versions_ref().len();
+            let mut number_of_package_versions = component.get_versions_ref().len();
 
             for package_version in component.get_versions_ref() {
-                let fmri = package_version.fmri_ref();
-                if !self.is_fmri_required_dependency(fmri) {
-                    number_of_components -= 1;
+                if !self.is_fmri_required_dependency(package_version.fmri_ref()) {
+                    number_of_package_versions -= 1;
                 }
             }
 
-            if number_of_components == 0 {
-                useless_component_names.add(
-                    UselessComponents::new(component.clone().get_name())
-                );
+            if number_of_package_versions == 0 {
+                problems.add_problem(UselessComponent(component.clone().get_name()));
             }
         }
-
-        if !useless_component_names.is_empty() {
-            return Err(useless_component_names);
-        }
-        Ok(())
     }
 
-    pub fn get_component_by_name(&self, name: &String) -> &Component {
-        for component in self.get_ref() {
-            if component.get_name_ref() == name {
-                return component;
-            }
-        }
-
-        panic!("error: {}", name)
-    }
-
-    pub fn get_component_by_package(&self, package: &FMRI) -> Option<&Component> {
-        for component in self.get_ref() {
-            for package_versions in component.get_versions_ref() {
-                if package_versions.fmri_ref().package_name_eq(package) {
-                    return Some(component);
-                }
-            }
-        }
-
-        info!("cant't find package {} it is maybe obsolete", package);
-        None
-    }
+    // pub fn get_component_by_name(&self, name: &String) -> &Component {
+    //     for component in self.get_ref() {
+    //         if component.get_name_ref() == name {
+    //             return component;
+    //         }
+    //     }
+    //
+    //     panic!("error: {}", name)
+    // }
+    //
+    // pub fn get_component_by_package(&self, package: &FMRI) -> Option<&Component> {
+    //     for component in self.get_ref() {
+    //         for package_versions in component.get_versions_ref() {
+    //             if package_versions.fmri_ref().package_name_eq(package) {
+    //                 return Some(component);
+    //             }
+    //         }
+    //     }
+    //
+    //     info!("cant't find package {} it is maybe obsolete", package);
+    //     None
+    // }
 
     pub fn get_component_name_by_package(&self, package: &FMRI) -> Option<&String> {
         for component in self.get_ref() {
@@ -326,7 +268,6 @@ impl Components {
 
         for component in self.get_ref() {
             for package_version in component.get_versions_ref() {
-
                 if package_version.fmri_ref().package_name_eq(fmri) {
                     let package = package_version.get_packages_ref()[0].clone();
 
@@ -340,7 +281,6 @@ impl Components {
                             DependencyTypes::None => unimplemented!()
                         }
                     }
-
                 }
             }
         }
@@ -369,11 +309,7 @@ impl Components {
         Some(list)
     }
 
-    pub fn check_dependency_validity(&self) -> Result<(), (NonExistingRequiredPackageList, ObsoletedRequiredPackageList, PartlyObsoletedRequiredPackageList)> {
-        let mut non_existing_required_package_list = NonExistingRequiredPackageList::new();
-        let mut obsolete_required_package_list = ObsoletedRequiredPackageList::new();
-        let mut partly_obsolete_required_package_list = PartlyObsoletedRequiredPackageList::new();
-
+    pub fn check_dependency_validity(&self, problems: &mut Problems) {
         for component in self.get_ref() {
             for package_version in component.get_versions_ref() {
                 for package in package_version.get_packages_ref() {
@@ -382,83 +318,52 @@ impl Components {
                     }
 
                     for runtime in package.get_runtime_dependencies() {
-                        match runtime.check_dependency_validity(self, package.clone()) {
-                            Ok(_) => {}
-                            Err((mut non_existing, mut obsolete, mut partly_obsolete)) => {
-                                non_existing.set_dependency_type(DependencyTypes::Runtime);
-                                obsolete.set_dependency_type(DependencyTypes::Runtime);
-                                partly_obsolete.set_dependency_type(DependencyTypes::Runtime);
-                                non_existing_required_package_list += non_existing;
-                                obsolete_required_package_list += obsolete;
-                                partly_obsolete_required_package_list += partly_obsolete;
-                            }
-                        }
+                        runtime.check_dependency_validity(
+                            self,
+                            problems,
+                            package.clone(),
+                            DependencyTypes::Runtime,
+                        )
                     }
 
                     for build in package.get_build_dependencies() {
-                        match build.check_dependency_validity(self, package.clone()) {
-                            Ok(_) => {}
-                            Err((mut non_existing, mut obsolete, mut partly_obsolete)) => {
-                                non_existing.set_dependency_type(DependencyTypes::Build);
-                                obsolete.set_dependency_type(DependencyTypes::Build);
-                                partly_obsolete.set_dependency_type(DependencyTypes::Build);
-                                non_existing_required_package_list += non_existing;
-                                obsolete_required_package_list += obsolete;
-                                partly_obsolete_required_package_list += partly_obsolete;
-                            }
-                        }
+                        build.check_dependency_validity(
+                            self,
+                            problems,
+                            package.clone(),
+                            DependencyTypes::Build,
+                        )
                     }
 
                     for test in package.get_test_dependencies() {
-                        match test.check_dependency_validity(self, package.clone()) {
-                            Ok(_) => {}
-                            Err((mut non_existing, mut obsolete, mut partly_obsolete)) => {
-                                non_existing.set_dependency_type(DependencyTypes::Test);
-                                obsolete.set_dependency_type(DependencyTypes::Test);
-                                partly_obsolete.set_dependency_type(DependencyTypes::Test);
-                                non_existing_required_package_list += non_existing;
-                                obsolete_required_package_list += obsolete;
-                                partly_obsolete_required_package_list += partly_obsolete;
-                            }
-                        }
+                        test.check_dependency_validity(
+                            self,
+                            problems,
+                            package.clone(),
+                            DependencyTypes::Test,
+                        )
                     }
 
                     for system_build in package.get_system_build_dependencies() {
-                        match system_build.check_dependency_validity(self, package.clone()) {
-                            Ok(_) => {}
-                            Err((mut non_existing, mut obsolete, mut partly_obsolete)) => {
-                                non_existing.set_dependency_type(DependencyTypes::SystemBuild);
-                                obsolete.set_dependency_type(DependencyTypes::SystemBuild);
-                                partly_obsolete.set_dependency_type(DependencyTypes::SystemBuild);
-                                non_existing_required_package_list += non_existing;
-                                obsolete_required_package_list += obsolete;
-                                partly_obsolete_required_package_list += partly_obsolete;
-                            }
-                        }
+                        system_build.check_dependency_validity(
+                            self,
+                            problems,
+                            package.clone(),
+                            DependencyTypes::SystemBuild,
+                        )
                     }
 
                     for system_test in package.get_system_test_dependencies() {
-                        match system_test.check_dependency_validity(self, package.clone()) {
-                            Ok(_) => {}
-                            Err((mut non_existing, mut obsolete, mut partly_obsolete)) => {
-                                non_existing.set_dependency_type(DependencyTypes::SystemTest);
-                                obsolete.set_dependency_type(DependencyTypes::SystemTest);
-                                partly_obsolete.set_dependency_type(DependencyTypes::SystemTest);
-                                non_existing_required_package_list += non_existing;
-                                obsolete_required_package_list += obsolete;
-                                partly_obsolete_required_package_list += partly_obsolete;
-                            }
-                        }
+                        system_test.check_dependency_validity(
+                            self,
+                            problems,
+                            package.clone(),
+                            DependencyTypes::SystemTest,
+                        )
                     }
                 }
             }
         }
-
-        if !non_existing_required_package_list.is_empty() || !obsolete_required_package_list.is_empty() || !partly_obsolete_required_package_list.is_empty() {
-            return Err((non_existing_required_package_list, obsolete_required_package_list, partly_obsolete_required_package_list));
-        }
-
-        Ok(())
     }
 
     pub fn remove_empty_components(&mut self) {
@@ -518,19 +423,21 @@ impl Components {
         false
     }
 
-    pub fn check_if_renamed_needs_renamed(&self) -> RenamedNeedsRenamedList {
-        let mut renamed_needs_renamed_list = RenamedNeedsRenamedList::new();
-
-        let mut find_needed_package_closure = |dependency: &Dependency, package_versions: &PackageVersions| {
-            match dependency.get_ref().get_content_ref() {
+    pub fn check_if_renamed_needs_renamed(&self, problems: &mut Problems) {
+        let mut find_needed_package_closure =
+            |dependency: &Dependency, package_versions: &PackageVersions| match dependency
+                .get_ref()
+                .get_content_ref()
+            {
                 Ok(fmri) => {
-                    match self.get_package_versions_from_fmri(fmri) {
-                        Some(needed_package_versions) => {
-                            if needed_package_versions.is_renamed() {
-                                renamed_needs_renamed_list.add(RenamedNeedsRenamed::new(package_versions.fmri_ref().clone(), needed_package_versions.fmri()))
-                            }
+                    if let Some(needed_package_versions) = self.get_package_versions_from_fmri(fmri)
+                    {
+                        if needed_package_versions.is_renamed() {
+                            problems.add_problem(RenamedNeedsRenamed(
+                                package_versions.fmri_ref().clone(),
+                                needed_package_versions.fmri(),
+                            ));
                         }
-                        None => {}
                     }
                 }
                 Err(fmri_list) => {
@@ -539,14 +446,16 @@ impl Components {
                             None => {}
                             Some(needed_package_versions) => {
                                 if needed_package_versions.is_renamed() {
-                                    renamed_needs_renamed_list.add(RenamedNeedsRenamed::new(package_versions.fmri_ref().clone(), needed_package_versions.fmri()))
+                                    problems.add_problem(RenamedNeedsRenamed(
+                                        package_versions.fmri_ref().clone(),
+                                        needed_package_versions.fmri(),
+                                    ));
                                 }
                             }
                         }
                     }
                 }
-            }
-        };
+            };
 
         for component in self.get_ref() {
             for package_versions in component.get_versions_ref() {
@@ -575,8 +484,6 @@ impl Components {
                 }
             }
         }
-
-        renamed_needs_renamed_list
     }
 
     pub fn get_package_versions_from_fmri(&self, fmri: &FMRI) -> Option<PackageVersions> {

@@ -5,12 +5,8 @@ use fmri::{
     FMRI, Publisher,
     Version, FMRIList,
 };
-use crate::ComponentPackagesList;
-use crate::problems::{
-    ProblemList,
-    RenamedPackageInComponent,
-    RenamedPackageInComponentList,
-};
+use crate::{ComponentPackagesList, Problems};
+
 use crate::packages::component::Component;
 use crate::packages::components::Components;
 use crate::packages::dependencies::Dependencies;
@@ -18,6 +14,7 @@ use crate::packages::dependency::Dependency;
 use crate::packages::depend_types::DependTypes;
 use crate::packages::package::Package;
 use crate::packages::package_versions::PackageVersions;
+use crate::problems::Problem::RenamedPackageInComponent;
 
 
 #[derive(Debug)]
@@ -240,9 +237,12 @@ pub fn open_json_file(mut source_path: PathBuf) -> Value {
     }
 }
 
-pub fn load_catalog_c(components: &mut Components, source_path: PathBuf, package_names_in_pkg5_list: &ComponentPackagesList) -> RenamedPackageInComponentList {
-    let mut renamed_package_in_component_list = RenamedPackageInComponentList::new();
-
+pub fn load_catalog_c(
+    components: &mut Components,
+    source_path: PathBuf,
+    problems: &mut Problems,
+    package_names_in_pkg5_list: &ComponentPackagesList,
+) {
     // open json file
     let json_value = open_json_file(source_path);
 
@@ -276,8 +276,8 @@ pub fn load_catalog_c(components: &mut Components, source_path: PathBuf, package
                         for action in value.as_array().expect("array") {
                             // parse action into dependency
                             match parse_action(action.as_str().expect("str").to_owned()) {
-                                Results::Dependency(mut d_type) => {
-                                    dependencies.add(Dependency::new(&mut d_type));
+                                Results::Dependency(d_type) => {
+                                    dependencies.add(Dependency::new(&d_type));
                                 }
                                 Results::Obsolete => obsolete = true,
                                 Results::Renamed => renamed = true,
@@ -287,7 +287,9 @@ pub fn load_catalog_c(components: &mut Components, source_path: PathBuf, package
                     } else if key == "version" {
                         // get version of current package_version
                         // it is changing on every package_version (will be used in *)
-                        fmri.change_version(Version::new(value.clone().as_str().expect("str").to_string()));
+                        fmri.change_version(Version::new(
+                            value.clone().as_str().expect("str").to_string(),
+                        ));
                     } else {
                         panic!("unknown key: {}", key)
                     }
@@ -306,15 +308,19 @@ pub fn load_catalog_c(components: &mut Components, source_path: PathBuf, package
                         // add obsolete
                         components.add_obsoleted(package.clone().fmri());
 
+                        // TODO: RenamedPackageInComponent is already being collected in get_component_packages_of_package_versions (remove this?)
                         if package.is_obsolete() {
                             for component_packages in package_names_in_pkg5_list.get() {
-                                for package_in_pkg5 in component_packages.get_packages_in_component().get_ref() {
-                                    if package.fmri_ref().get_package_name_as_ref_string() == package_in_pkg5.get_package_name_as_ref_string() {
-                                        renamed_package_in_component_list.add(RenamedPackageInComponent::new(
+                                for package_in_pkg5 in
+                                component_packages.packages_in_component.get_ref()
+                                {
+                                    if package.fmri_ref().get_package_name_as_ref_string()
+                                        == package_in_pkg5.get_package_name_as_ref_string()
+                                    {
+                                        problems.add_problem(RenamedPackageInComponent(
                                             package.clone().fmri(),
-                                            false,
-                                            component_packages.get_component_name().clone(),
-                                        ))
+                                            component_packages.component_name.clone(),
+                                        ));
                                     }
                                 }
                             }
@@ -336,5 +342,4 @@ pub fn load_catalog_c(components: &mut Components, source_path: PathBuf, package
     // remove empty components and package versions
     components.remove_empty_package_versions();
     components.remove_empty_components();
-    renamed_package_in_component_list
 }
