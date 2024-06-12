@@ -161,29 +161,6 @@ impl Components {
         }
     }
 
-    // pub fn get_component_by_name(&self, name: &String) -> &Component {
-    //     for component in self.get_ref() {
-    //         if component.get_name_ref() == name {
-    //             return component;
-    //         }
-    //     }
-    //
-    //     panic!("error: {}", name)
-    // }
-    //
-    // pub fn get_component_by_package(&self, package: &FMRI) -> Option<&Component> {
-    //     for component in self.get_ref() {
-    //         for package_versions in component.get_versions_ref() {
-    //             if package_versions.fmri_ref().package_name_eq(package) {
-    //                 return Some(component);
-    //             }
-    //         }
-    //     }
-    //
-    //     info!("cant't find package {} it is maybe obsolete", package);
-    //     None
-    // }
-
     pub fn get_component_name_by_package(&self, package: &FMRI) -> Option<&String> {
         for component in self.get_ref() {
             for package_versions in component.get_versions_ref() {
@@ -234,32 +211,6 @@ impl Components {
     //     Some(cycles)
     // }
 
-    pub fn check_useless_packages(&self) -> FMRIList {
-        let mut useless_fmri_list = FMRIList::new();
-
-        let counter: f32 = self.get_ref().len() as f32 / 100.;
-        let mut last: i32 = -1;
-        for (index, component) in self.get_ref().iter().enumerate() {
-            for package_version in component.get_versions_ref() {
-                for package in package_version.get_packages_ref() {
-                    let fmri = package.fmri_ref();
-                    if !self.is_fmri_required_dependency(fmri) {
-                        // info!("package {} isn't require as dependency", fmri);
-                        useless_fmri_list.add(fmri.clone());
-                    }
-                }
-            }
-
-            let update = index as f32 / counter;
-            if update as i32 > last {
-                last = update as i32;
-                info!("{}%", last);
-            }
-        }
-
-        useless_fmri_list
-    }
-
     pub fn is_fmri_required_dependency(&self, fmri: &FMRI) -> bool {
         for component in self.get_ref() {
             for package_version in component.get_versions_ref() {
@@ -274,44 +225,6 @@ impl Components {
             }
         }
         false
-    }
-
-    pub fn get_dependencies_of_fmri(
-        &self,
-        fmri: &FMRI,
-        dependency_types: Vec<DependencyTypes>,
-    ) -> Dependencies {
-        let mut dependencies: Dependencies = Dependencies::new();
-
-        for component in self.get_ref() {
-            for package_version in component.get_versions_ref() {
-                if package_version.fmri_ref().package_name_eq(fmri) {
-                    let package = package_version.get_packages_ref()[0].clone();
-
-                    for dependency_type in &dependency_types {
-                        dependencies += match dependency_type {
-                            DependencyTypes::Runtime => {
-                                package.get_runtime_dependencies_as_struct().clone()
-                            }
-                            DependencyTypes::Build => {
-                                package.get_build_dependencies_as_struct().clone()
-                            }
-                            DependencyTypes::Test => {
-                                package.get_test_dependencies_as_struct().clone()
-                            }
-                            DependencyTypes::SystemBuild => {
-                                package.get_system_build_dependencies_as_struct().clone()
-                            }
-                            DependencyTypes::SystemTest => {
-                                package.get_system_test_dependencies_as_struct().clone()
-                            }
-                            DependencyTypes::None => unimplemented!(),
-                        }
-                    }
-                }
-            }
-        }
-        dependencies
     }
 
     pub fn get_dependencies_with_fmri(
