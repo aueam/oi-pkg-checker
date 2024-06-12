@@ -8,7 +8,7 @@ use fmri::FMRI;
 use log::{debug, error, info, LevelFilter};
 
 use oi_pkg_checker_core::{
-    AssetTypes, ComponentPackagesList, Components, DependTypes, PackageVersions, Problems, report,
+    report, AssetTypes, ComponentPackagesList, Components, DependTypes, PackageVersions, Problems,
 };
 
 use crate::{
@@ -33,12 +33,7 @@ fn main() {
         Some(subcommand) => match subcommand {
             Commands::PrintProblems { debug } => {
                 debug_on(debug);
-
-                report(
-                    &mut Problems::deserialize(problems_path).unwrap(),
-                    &Components::deserialize(data_path),
-                );
-
+                report(&mut Problems::deserialize(problems_path).unwrap());
                 exit(0);
             }
             Commands::CheckFMRI { fmri, debug } => {
@@ -118,7 +113,7 @@ fn main() {
                 components.get_useless_components(&mut problems);
                 components.check_if_renamed_needs_renamed(&mut problems);
 
-                report(&mut problems, &components);
+                report(&mut problems);
 
                 components.serialize(data_path);
 

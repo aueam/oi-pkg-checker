@@ -1,4 +1,6 @@
-use fmri::{FMRI, fmri_list::FMRIList};
+use std::cell::RefCell;
+
+use fmri::{fmri_list::FMRIList, FMRI};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -6,10 +8,11 @@ use crate::{
         components::Components, depend_types::DependTypes, dependency_type::DependencyTypes,
         package::Package,
     },
-    Problems,
     problems::Problem::{
-        NonExistingRequiredPackage, ObsoletedRequiredPackage, PartlyObsoletedRequiredPackage,
+        NonExistingRequired, NonExistingRequiredByRenamed, ObsoletedRequired,
+        ObsoletedRequiredByRenamed, PartlyObsoletedRequired, PartlyObsoletedRequiredByRenamed,
     },
+    Problems,
 };
 
 /// Represents depend action, it contains [`DependTypes`], all [`FMRIs`][`FMRI`] in it are without [`Publisher`]
@@ -59,209 +62,176 @@ impl Dependency {
     pub fn check_dependency_validity(
         &self,
         components: &Components,
-        problems: &mut Problems,
+        mut problems: &mut Problems,
         package: Package,
         dependency_type: DependencyTypes,
     ) {
+        let problems = RefCell::new(&mut problems);
+
+        let obsoleted = |d_type: DependTypes| {
+            let package_fmri = package.clone().fmri();
+
+            problems.borrow_mut().add_problem(if package.is_renamed() {
+                ObsoletedRequiredByRenamed(d_type, dependency_type.clone(), package_fmri)
+            } else {
+                let component_name = components
+                    .get_component_name_by_package(&package_fmri)
+                    .unwrap()
+                    .clone();
+                ObsoletedRequired(
+                    d_type,
+                    dependency_type.clone(),
+                    package_fmri,
+                    component_name,
+                )
+            });
+        };
+
+        let partly = |d_type: DependTypes| {
+            let package_fmri = package.clone().fmri();
+
+            problems.borrow_mut().add_problem(if package.is_renamed() {
+                PartlyObsoletedRequiredByRenamed(d_type, dependency_type.clone(), package_fmri)
+            } else {
+                let component_name = components
+                    .get_component_name_by_package(&package_fmri)
+                    .unwrap()
+                    .clone();
+                PartlyObsoletedRequired(
+                    d_type,
+                    dependency_type.clone(),
+                    package_fmri,
+                    component_name,
+                )
+            });
+        };
+
+        let non_existing = |d_type: DependTypes| {
+            let package_fmri = package.clone().fmri();
+
+            problems.borrow_mut().add_problem(if package.is_renamed() {
+                NonExistingRequiredByRenamed(d_type, dependency_type.clone(), package_fmri)
+            } else {
+                let component_name = components
+                    .get_component_name_by_package(&package_fmri)
+                    .unwrap()
+                    .clone();
+                NonExistingRequired(
+                    d_type,
+                    dependency_type.clone(),
+                    package_fmri,
+                    component_name,
+                )
+            });
+        };
+
         match self.get_ref() {
             DependTypes::Require(fmri) => {
                 if components.is_fmri_obsoleted(fmri) {
                     if !components.check_if_fmri_exists_as_package(fmri) {
-                        problems.add_problem(ObsoletedRequiredPackage(
-                            DependTypes::Require(fmri.clone()),
-                            dependency_type,
-                            package.clone().fmri(),
-                            package.is_renamed(),
-                        ));
+                        obsoleted(DependTypes::Require(fmri.clone()));
                     } else {
-                        problems.add_problem(PartlyObsoletedRequiredPackage(
-                            DependTypes::Require(fmri.clone()),
-                            dependency_type,
-                            package.clone().fmri(),
-                            package.is_renamed(),
-                        ));
+                        partly(DependTypes::Require(fmri.clone()));
                     }
                 } else if !components.check_if_fmri_exists_as_package(fmri) {
-                    problems.add_problem(NonExistingRequiredPackage(
-                        DependTypes::Require(fmri.clone()),
-                        dependency_type,
-                        package.clone().fmri(),
-                        package.is_renamed(),
-                    ));
+                    non_existing(DependTypes::Require(fmri.clone()));
                 }
             }
             DependTypes::Optional(fmri) => {
                 if components.is_fmri_obsoleted(fmri) {
                     if !components.check_if_fmri_exists_as_package(fmri) {
-                        problems.add_problem(ObsoletedRequiredPackage(
-                            DependTypes::Optional(fmri.clone()),
-                            dependency_type,
-                            package.clone().fmri(),
-                            package.is_renamed(),
-                        ));
+                        obsoleted(DependTypes::Optional(fmri.clone()));
                     } else {
-                        problems.add_problem(PartlyObsoletedRequiredPackage(
-                            DependTypes::Optional(fmri.clone()),
-                            dependency_type,
-                            package.clone().fmri(),
-                            package.is_renamed(),
-                        ));
+                        partly(DependTypes::Optional(fmri.clone()));
                     }
                 } else if !components.check_if_fmri_exists_as_package(fmri) {
-                    problems.add_problem(NonExistingRequiredPackage(
-                        DependTypes::Optional(fmri.clone()),
-                        dependency_type,
-                        package.clone().fmri(),
-                        package.is_renamed(),
-                    ));
+                    non_existing(DependTypes::Optional(fmri.clone()));
                 }
             }
             DependTypes::Incorporate(fmri) => {
                 if !components.is_fmri_obsoleted(fmri)
                     && !components.check_if_fmri_exists_as_package(fmri)
                 {
-                    problems.add_problem(NonExistingRequiredPackage(
-                        DependTypes::Incorporate(fmri.clone()),
-                        dependency_type,
-                        package.clone().fmri(),
-                        package.is_renamed(),
-                    ));
+                    non_existing(DependTypes::Incorporate(fmri.clone()));
                 }
             }
             DependTypes::RequireAny(fmri_list) => {
-                let mut fmri_list_obsolete = FMRIList::new();
-                let mut fmri_list_partly_obsolete = FMRIList::new();
-                let mut fmri_list_non_existing = FMRIList::new();
+                let mut obsolete_list = FMRIList::new();
+                let mut partly_obsolete_list = FMRIList::new();
+                let mut non_existing_list = FMRIList::new();
 
                 for fmri in fmri_list.get_ref() {
                     if components.is_fmri_obsoleted(fmri) {
                         if !components.check_if_fmri_exists_as_package(fmri) {
-                            fmri_list_obsolete.add(fmri.clone());
+                            obsolete_list.add(fmri.clone());
                         } else {
-                            fmri_list_partly_obsolete.add(fmri.clone());
+                            partly_obsolete_list.add(fmri.clone());
                         }
                     } else if !components.check_if_fmri_exists_as_package(fmri) {
-                        fmri_list_non_existing.add(fmri.clone())
+                        non_existing_list.add(fmri.clone())
                     }
                 }
 
-                if !fmri_list_obsolete.is_empty() {
-                    problems.add_problem(ObsoletedRequiredPackage(
-                        DependTypes::RequireAny(fmri_list_obsolete),
-                        dependency_type.clone(),
-                        package.clone().fmri(),
-                        package.is_renamed(),
-                    ));
+                if !obsolete_list.is_empty() {
+                    obsoleted(DependTypes::RequireAny(obsolete_list));
                 }
 
-                if !fmri_list_partly_obsolete.is_empty() {
-                    problems.add_problem(PartlyObsoletedRequiredPackage(
-                        DependTypes::RequireAny(fmri_list_partly_obsolete),
-                        dependency_type.clone(),
-                        package.clone().fmri(),
-                        package.is_renamed(),
-                    ));
+                if !partly_obsolete_list.is_empty() {
+                    partly(DependTypes::RequireAny(partly_obsolete_list));
                 }
 
-                if !fmri_list_non_existing.is_empty() {
-                    problems.add_problem(NonExistingRequiredPackage(
-                        DependTypes::RequireAny(fmri_list_non_existing),
-                        dependency_type,
-                        package.clone().fmri(),
-                        package.is_renamed(),
-                    ));
+                if !non_existing_list.is_empty() {
+                    non_existing(DependTypes::RequireAny(non_existing_list));
                 }
             }
             DependTypes::Conditional(fmri, predicate) => {
                 if components.is_fmri_obsoleted(fmri) {
                     if !components.check_if_fmri_exists_as_package(fmri) {
-                        problems.add_problem(ObsoletedRequiredPackage(
-                            DependTypes::Conditional(
-                                fmri.clone(),
-                                FMRI::parse_raw("none").unwrap(),
-                            ),
-                            dependency_type.clone(),
-                            package.clone().fmri(),
-                            package.is_renamed(),
+                        obsoleted(DependTypes::Conditional(
+                            fmri.clone(),
+                            FMRI::parse_raw("none").unwrap(),
                         ));
                     } else {
-                        problems.add_problem(PartlyObsoletedRequiredPackage(
-                            DependTypes::Conditional(
-                                fmri.clone(),
-                                FMRI::parse_raw("none").unwrap(),
-                            ),
-                            dependency_type.clone(),
-                            package.clone().fmri(),
-                            package.is_renamed(),
+                        partly(DependTypes::Conditional(
+                            fmri.clone(),
+                            FMRI::parse_raw("none").unwrap(),
                         ));
                     }
                 } else if !components.check_if_fmri_exists_as_package(fmri) {
-                    problems.add_problem(NonExistingRequiredPackage(
-                        DependTypes::Conditional(fmri.clone(), FMRI::parse_raw("none").unwrap()),
-                        dependency_type.clone(),
-                        package.clone().fmri(),
-                        package.is_renamed(),
+                    non_existing(DependTypes::Conditional(
+                        fmri.clone(),
+                        FMRI::parse_raw("none").unwrap(),
                     ));
                 }
 
                 if components.is_fmri_obsoleted(predicate) {
                     if !components.check_if_fmri_exists_as_package(predicate) {
-                        problems.add_problem(ObsoletedRequiredPackage(
-                            DependTypes::Conditional(
-                                FMRI::parse_raw("none").unwrap(),
-                                predicate.clone(),
-                            ),
-                            dependency_type.clone(),
-                            package.clone().fmri(),
-                            package.is_renamed(),
+                        obsoleted(DependTypes::Conditional(
+                            FMRI::parse_raw("none").unwrap(),
+                            fmri.clone(),
                         ));
                     } else {
-                        problems.add_problem(PartlyObsoletedRequiredPackage(
-                            DependTypes::Conditional(
-                                FMRI::parse_raw("none").unwrap(),
-                                predicate.clone(),
-                            ),
-                            dependency_type.clone(),
-                            package.clone().fmri(),
-                            package.is_renamed(),
+                        partly(DependTypes::Conditional(
+                            FMRI::parse_raw("none").unwrap(),
+                            fmri.clone(),
                         ));
                     }
                 } else if !components.check_if_fmri_exists_as_package(predicate) {
-                    problems.add_problem(NonExistingRequiredPackage(
-                        DependTypes::Conditional(
-                            FMRI::parse_raw("none").unwrap(),
-                            predicate.clone(),
-                        ),
-                        dependency_type.clone(),
-                        package.clone().fmri(),
-                        package.is_renamed(),
+                    non_existing(DependTypes::Conditional(
+                        FMRI::parse_raw("none").unwrap(),
+                        fmri.clone(),
                     ));
                 }
             }
             DependTypes::Group(fmri) => {
                 if components.is_fmri_obsoleted(fmri) {
                     if !components.check_if_fmri_exists_as_package(fmri) {
-                        problems.add_problem(ObsoletedRequiredPackage(
-                            DependTypes::Group(fmri.clone()),
-                            dependency_type,
-                            package.clone().fmri(),
-                            package.is_renamed(),
-                        ));
+                        obsoleted(DependTypes::Group(fmri.clone()));
                     } else {
-                        problems.add_problem(PartlyObsoletedRequiredPackage(
-                            DependTypes::Group(fmri.clone()),
-                            dependency_type.clone(),
-                            package.clone().fmri(),
-                            package.is_renamed(),
-                        ));
+                        partly(DependTypes::Group(fmri.clone()));
                     }
                 } else if !components.check_if_fmri_exists_as_package(fmri) {
-                    problems.add_problem(NonExistingRequiredPackage(
-                        DependTypes::Group(fmri.clone()),
-                        dependency_type.clone(),
-                        package.clone().fmri(),
-                        package.is_renamed(),
-                    ));
+                    non_existing(DependTypes::Group(fmri.clone()));
                 }
             }
             _ => unimplemented!(),
