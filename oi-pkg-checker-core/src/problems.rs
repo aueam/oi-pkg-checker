@@ -84,9 +84,63 @@ impl Problems {
             UselessComponent(_component_name) => {}
         }
 
-        if !self.0.contains(&problem) {
+        if !self.contains(&problem) {
             self.0.push(problem)
         }
+    }
+
+    fn contains(&self, problem: &Problem) -> bool {
+        let contains_component = |depend_type: &DependTypes,
+                                  dependency_type: &DependencyTypes,
+                                  component_name: &String|
+         -> bool {
+            if dependency_type != &DependencyTypes::Runtime {
+                return self.0.iter().any(|p| {
+                    if let NonExistingRequired(a, b, _, c) = p {
+                        if a == depend_type && b == dependency_type && c == component_name {
+                            return true;
+                        }
+                    }
+
+                    if let ObsoletedRequired(a, b, _, c) = p {
+                        if a == depend_type && b == dependency_type && c == component_name {
+                            return true;
+                        }
+                    }
+
+                    if let PartlyObsoletedRequired(a, b, _, c) = p {
+                        if a == depend_type && b == dependency_type && c == component_name {
+                            return true;
+                        }
+                    }
+
+                    false
+                });
+            }
+
+            false
+        };
+
+        match problem {
+            NonExistingRequired(depend_type, dependency_type, _, component_name) => {
+                if contains_component(depend_type, dependency_type, component_name) {
+                    return true;
+                }
+            }
+            ObsoletedRequired(depend_type, dependency_type, _, component_name) => {
+                if contains_component(depend_type, dependency_type, component_name) {
+                    return true;
+                }
+            }
+            PartlyObsoletedRequired(depend_type, dependency_type, _, component_name) => {
+                if contains_component(depend_type, dependency_type, component_name) {
+                    return true;
+                }
+            }
+            _ => {}
+        };
+
+        self.0.contains(problem)
     }
 
     pub fn serialize<P: AsRef<Path> + ?Sized + std::fmt::Display>(
