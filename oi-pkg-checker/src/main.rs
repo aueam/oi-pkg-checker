@@ -8,7 +8,7 @@ use fmri::FMRI;
 use log::{debug, error, info, LevelFilter};
 
 use oi_pkg_checker_core::{
-    report, AssetTypes, ComponentPackagesList, Components, DependTypes, PackageVersions, Problems,
+    AssetTypes, ComponentPackagesList, Components, DependTypes, PackageVersions, Problems, report,
 };
 
 use crate::{
@@ -36,7 +36,11 @@ fn main() {
                 report(&mut Problems::deserialize(problems_path).unwrap());
                 exit(0);
             }
-            Commands::CheckFMRI { fmri, debug } => {
+            Commands::CheckFMRI {
+                fmri,
+                debug,
+                hide_renamed,
+            } => {
                 debug_on(debug);
 
                 let fmri = &FMRI::parse_raw(fmri).unwrap();
@@ -58,7 +62,7 @@ fn main() {
 
                 if let Some(dependencies) = components.get_dependencies_with_fmri(fmri) {
                     info!("fmri {} is required by:", fmri);
-                    for (fmri, dependency_type, dependency) in dependencies {
+                    for (fmri, dependency_type, dependency, renamed) in dependencies {
                         let d_type = match dependency.get_ref() {
                             DependTypes::Require(_) => "require",
                             DependTypes::Optional(_) => "optional",
@@ -69,9 +73,16 @@ fn main() {
                             _ => unimplemented!(),
                         };
 
+                        if *hide_renamed && renamed {
+                            continue;
+                        }
+
                         info!(
-                            "\ttype: {}, dependency: {}, package: {}",
-                            d_type, dependency_type, fmri
+                            "\ttype: {}, dependency: {}, {}package: {}",
+                            d_type,
+                            dependency_type,
+                            if renamed { "renamed " } else { "" },
+                            fmri
                         );
                     }
                 } else {

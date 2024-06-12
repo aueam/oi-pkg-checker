@@ -1,5 +1,6 @@
-use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -32,6 +33,10 @@ pub enum Commands {
     CheckFMRI {
         /// checking valid fmri
         fmri: String,
+
+        /// hide renamed packages
+        #[arg(long, default_value = "false")]
+        hide_renamed: bool,
 
         /// set debug on
         #[arg(short, long, default_value = "false")]

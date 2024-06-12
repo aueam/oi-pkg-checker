@@ -18,8 +18,8 @@ use crate::{
         open_indiana_oi_userland_git::{component_list, ComponentPackagesList, load_dependencies},
     },
     packages::{
-        component::Component, dependencies::Dependencies, dependency::Dependency,
-        dependency_type::DependencyTypes, package_versions::PackageVersions,
+        component::Component, dependency::Dependency, dependency_type::DependencyTypes,
+        package_versions::PackageVersions,
     },
     Problems,
     problems::Problem::{RenamedNeedsRenamed, UselessComponent},
@@ -230,16 +230,16 @@ impl Components {
     pub fn get_dependencies_with_fmri(
         &self,
         fmri: &FMRI,
-    ) -> Option<Vec<(FMRI, String, Dependency)>> {
-        let mut list: Vec<(FMRI, String, Dependency)> = Vec::new();
+    ) -> Option<Vec<(FMRI, String, Dependency, bool)>> {
+        let mut list: Vec<(FMRI, String, Dependency, bool)> = Vec::new();
         for component in self.get_ref() {
             for package_version in component.get_versions_ref() {
                 for package in package_version.get_packages_ref() {
                     if !package.fmri_ref().package_name_eq(fmri) {
                         if let Some(dependencies) = package.is_fmri_needed_as_dependency(self, fmri)
                         {
-                            for (fmri, d_type, dependency) in dependencies {
-                                list.push((fmri, d_type, dependency))
+                            for (fmri, d_type, dependency, renamed) in dependencies {
+                                list.push((fmri, d_type, dependency, renamed))
                             }
                         }
                     }
