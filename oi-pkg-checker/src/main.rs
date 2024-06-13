@@ -8,7 +8,7 @@ use fmri::FMRI;
 use log::{debug, error, info, LevelFilter};
 
 use oi_pkg_checker_core::{
-    AssetTypes, ComponentPackagesList, Components, DependTypes, PackageVersions, Problems, report,
+    report, AssetTypes, ComponentPackagesList, Components, DependTypes, PackageVersions, Problems,
 };
 
 use crate::{
@@ -123,6 +123,8 @@ fn main() {
                 components.check_dependency_validity(&mut problems);
                 components.get_useless_components(&mut problems);
                 components.check_if_renamed_needs_renamed(&mut problems);
+                ComponentPackagesList::new(components_path)
+                    .same_packages_in_components(&mut problems);
 
                 report(&mut problems);
 

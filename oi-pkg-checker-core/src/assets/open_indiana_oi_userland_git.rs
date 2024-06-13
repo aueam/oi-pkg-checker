@@ -1,22 +1,23 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     process::Command,
 };
 
-use fmri::{FMRI, fmri_list::FMRIList};
+use fmri::{fmri_list::FMRIList, FMRI};
 
 use crate::{
     assets::catalogs_c::open_json_file,
-    Components,
-    Dependencies, DependencyTypes, DependencyTypes::{Build, SystemBuild, SystemTest, Test},
-    PackageVersions,
     problems::{
         Problem::{
-            MissingComponentForPackage, ObsoletedPackageInComponent, RenamedPackageInComponent,
-            UnRunnableMakeCommand,
+            MissingComponentForPackage, ObsoletedPackageInComponent, PackageInMultipleComponents,
+            RenamedPackageInComponent, UnRunnableMakeCommand,
         },
         Problems,
     },
+    Components, Dependencies, DependencyTypes,
+    DependencyTypes::{Build, SystemBuild, SystemTest, Test},
+    PackageVersions,
 };
 
 #[derive(Clone, Debug)]
@@ -176,6 +177,28 @@ impl ComponentPackagesList {
             .collect();
 
         Ok(FMRIList::from(fmri_list))
+    }
+
+    /// finds same package in multiple components
+    pub fn same_packages_in_components(&self, problems: &mut Problems) {
+        let mut map: HashMap<&FMRI, Vec<&String>> = HashMap::new();
+
+        for component_packages in self.get() {
+            for fmri in component_packages.packages_in_component.get_ref() {
+                map.entry(fmri)
+                    .or_default()
+                    .push(&component_packages.component_name)
+            }
+        }
+
+        for (fmri, components) in map {
+            if components.len() > 1 {
+                problems.add_problem(PackageInMultipleComponents(
+                    fmri.clone(),
+                    components.into_iter().cloned().collect::<Vec<String>>(),
+                ));
+            }
+        }
     }
 }
 

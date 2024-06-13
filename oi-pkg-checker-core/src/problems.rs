@@ -14,8 +14,8 @@ use crate::{
     problems::Problem::{
         MissingComponentForPackage, NonExistingRequired, NonExistingRequiredByRenamed,
         ObsoletedPackageInComponent, ObsoletedRequired, ObsoletedRequiredByRenamed,
-        PartlyObsoletedRequired, PartlyObsoletedRequiredByRenamed, RenamedNeedsRenamed,
-        RenamedPackageInComponent, UnRunnableMakeCommand, UselessComponent,
+        PackageInMultipleComponents, PartlyObsoletedRequired, PartlyObsoletedRequiredByRenamed,
+        RenamedNeedsRenamed, RenamedPackageInComponent, UnRunnableMakeCommand, UselessComponent,
     },
 };
 
@@ -33,6 +33,7 @@ pub enum Problem {
     PartlyObsoletedRequired(DependTypes, DependencyTypes, FMRI, String),
     PartlyObsoletedRequiredByRenamed(DependTypes, DependencyTypes, FMRI),
     UselessComponent(String),
+    PackageInMultipleComponents(FMRI, Vec<String>),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -82,6 +83,9 @@ impl Problems {
                 required_by.remove_version();
             }
             UselessComponent(_component_name) => {}
+            PackageInMultipleComponents(fmri, _) => {
+                fmri.remove_version();
+            }
         }
 
         if !self.contains(&problem) {
@@ -182,6 +186,7 @@ impl Problems {
                 ObsoletedRequired(_, _, _, _) => 9,
                 ObsoletedRequiredByRenamed(_, _, _) => 10,
                 UnRunnableMakeCommand(_, _) => 11,
+                PackageInMultipleComponents(_, _) => 12,
             }
         };
 
@@ -189,7 +194,7 @@ impl Problems {
     }
 
     fn count(&self) {
-        let mut counter: [i16; 12] = [0; 12];
+        let mut counter: [i16; 13] = [0; 13];
         for problem in self.get_ref() {
             match problem {
                 UselessComponent(_) => counter[0] += 1,
@@ -204,6 +209,7 @@ impl Problems {
                 ObsoletedRequired(_, _, _, _) => counter[9] += 1,
                 ObsoletedRequiredByRenamed(_, _, _) => counter[10] += 1,
                 UnRunnableMakeCommand(_, _) => counter[11] += 1,
+                PackageInMultipleComponents(_, _) => counter[12] += 1,
             }
         }
 
@@ -221,6 +227,7 @@ impl Problems {
                 9 => error!("Number of obsoleted packages which are needed as dependency: {}", count),
                 10 => error!("Number of obsoleted packages which are needed as dependency in renamed package: {}", count),
                 11 => error!("Number of un-runnable make commands: {}", count),
+                12 => error!("Number of packages that are in multiple components: {}", count),
                 _ => panic!("invalid problem type"),
             }
         }
@@ -238,6 +245,13 @@ pub fn report(problems: &mut Problems) {
 
     for problem in problems.get_ref() {
         match problem {
+            PackageInMultipleComponents(fmri, components) => {
+                error!(
+                    "package {} is in multiple components: {}",
+                    fmri,
+                    components.join(",")
+                )
+            }
             UselessComponent(name) => info!("component {} is not needed by any package", name),
             MissingComponentForPackage(fmri) => warn!("missing component for {}", fmri),
             RenamedNeedsRenamed(fmri_a, fmri_b) => error!(
