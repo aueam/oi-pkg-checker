@@ -7,22 +7,22 @@ use std::{
 };
 
 use bincode::{deserialize, serialize};
-use fmri::{FMRI, fmri_list::FMRIList};
-use log::{debug, info};
+use fmri::{fmri_list::FMRIList, FMRI};
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     assets::{
         assets_types::AssetTypes,
         catalogs_c::load_catalog_c,
-        open_indiana_oi_userland_git::{component_list, ComponentPackagesList, load_dependencies},
+        open_indiana_oi_userland_git::{component_list, load_dependencies, ComponentPackagesList},
     },
-    DependTypes,
     packages::{
         component::Component, dependency::Dependency, dependency_type::DependencyTypes,
         package_versions::PackageVersions,
     },
-    Problems, problems::Problem::{RenamedNeedsRenamed, UselessComponent},
+    problems::Problem::{RenamedNeedsRenamed, UselessComponent},
+    DependTypes, Problems,
 };
 
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
@@ -43,40 +43,38 @@ impl Components {
         &mut self,
         problems: &mut Problems,
         asset: AssetTypes,
-        oi_userland_components: &Path,
+        component_packages_list: &ComponentPackagesList,
     ) {
-        let component_packages_list = ComponentPackagesList::new(oi_userland_components);
-
         match asset {
             AssetTypes::Catalogs(paths) => {
                 for path in paths {
-                    load_catalog_c(self, path, problems, &component_packages_list);
+                    load_catalog_c(self, path, problems, component_packages_list);
                 }
             }
             AssetTypes::OpenIndianaOiUserlandGit => {
-                component_list(self, problems, &component_packages_list);
+                component_list(self, problems, component_packages_list);
                 load_dependencies(
                     self,
                     problems,
-                    &component_packages_list,
+                    component_packages_list,
                     &DependencyTypes::Build,
                 );
                 load_dependencies(
                     self,
                     problems,
-                    &component_packages_list,
+                    component_packages_list,
                     &DependencyTypes::Test,
                 );
                 load_dependencies(
                     self,
                     problems,
-                    &component_packages_list,
+                    component_packages_list,
                     &DependencyTypes::SystemBuild,
                 );
                 load_dependencies(
                     self,
                     problems,
-                    &component_packages_list,
+                    component_packages_list,
                     &DependencyTypes::SystemTest,
                 );
             }
@@ -170,7 +168,7 @@ impl Components {
             }
         }
 
-        info!("can't find package {} it is maybe obsolete", package);
+        // info!("can't find package {} it is maybe obsolete", package);
         None
     }
 

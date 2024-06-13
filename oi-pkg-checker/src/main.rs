@@ -108,23 +108,25 @@ fn main() {
 
                 let mut problems = Problems::new();
                 let mut components = Components::new();
+                let component_packages = ComponentPackagesList::new(components_path);
 
                 components.load(
                     &mut problems,
                     AssetTypes::Catalogs(catalog.clone()),
-                    components_path,
+                    &component_packages,
                 );
                 components.load(
                     &mut problems,
                     AssetTypes::OpenIndianaOiUserlandGit,
-                    components_path,
+                    &component_packages,
                 );
 
                 components.check_dependency_validity(&mut problems);
                 components.get_useless_components(&mut problems);
                 components.check_if_renamed_needs_renamed(&mut problems);
-                ComponentPackagesList::new(components_path)
-                    .same_packages_in_components(&mut problems);
+
+                component_packages.same_packages_in_components(&mut problems);
+                component_packages.non_existing_packages_in_pkg5(&mut problems, &components);
 
                 report(&mut problems);
 

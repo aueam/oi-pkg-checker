@@ -12,10 +12,11 @@ use serde::{Deserialize, Serialize};
 use crate::{
     packages::{depend_types::DependTypes, dependency_type::DependencyTypes},
     problems::Problem::{
-        MissingComponentForPackage, NonExistingRequired, NonExistingRequiredByRenamed,
-        ObsoletedPackageInComponent, ObsoletedRequired, ObsoletedRequiredByRenamed,
-        PackageInMultipleComponents, PartlyObsoletedRequired, PartlyObsoletedRequiredByRenamed,
-        RenamedNeedsRenamed, RenamedPackageInComponent, UnRunnableMakeCommand, UselessComponent,
+        MissingComponentForPackage, NonExistingPackageInPkg5, NonExistingRequired,
+        NonExistingRequiredByRenamed, ObsoletedPackageInComponent, ObsoletedRequired,
+        ObsoletedRequiredByRenamed, PackageInMultipleComponents, PartlyObsoletedRequired,
+        PartlyObsoletedRequiredByRenamed, RenamedNeedsRenamed, RenamedPackageInComponent,
+        UnRunnableMakeCommand, UselessComponent,
     },
 };
 
@@ -34,6 +35,7 @@ pub enum Problem {
     PartlyObsoletedRequiredByRenamed(DependTypes, DependencyTypes, FMRI),
     UselessComponent(String),
     PackageInMultipleComponents(FMRI, Vec<String>),
+    NonExistingPackageInPkg5(FMRI, PathBuf),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -84,6 +86,9 @@ impl Problems {
             }
             UselessComponent(_component_name) => {}
             PackageInMultipleComponents(fmri, _) => {
+                fmri.remove_version();
+            }
+            NonExistingPackageInPkg5(fmri, _) => {
                 fmri.remove_version();
             }
         }
@@ -187,6 +192,7 @@ impl Problems {
                 ObsoletedRequiredByRenamed(_, _, _) => 10,
                 UnRunnableMakeCommand(_, _) => 11,
                 PackageInMultipleComponents(_, _) => 12,
+                NonExistingPackageInPkg5(_, _) => 13,
             }
         };
 
@@ -194,7 +200,7 @@ impl Problems {
     }
 
     fn count(&self) {
-        let mut counter: [i16; 13] = [0; 13];
+        let mut counter: [i16; 14] = [0; 14];
         for problem in self.get_ref() {
             match problem {
                 UselessComponent(_) => counter[0] += 1,
@@ -210,6 +216,7 @@ impl Problems {
                 ObsoletedRequiredByRenamed(_, _, _) => counter[10] += 1,
                 UnRunnableMakeCommand(_, _) => counter[11] += 1,
                 PackageInMultipleComponents(_, _) => counter[12] += 1,
+                NonExistingPackageInPkg5(_, _) => counter[13] += 1,
             }
         }
 
@@ -228,6 +235,7 @@ impl Problems {
                 10 => error!("Number of obsoleted packages which are needed as dependency in renamed package: {}", count),
                 11 => error!("Number of un-runnable make commands: {}", count),
                 12 => error!("Number of packages that are in multiple components: {}", count),
+                13 => error!("Number of packages that are in pkg5 file but do not exist: {}", count),
                 _ => panic!("invalid problem type"),
             }
         }
@@ -245,6 +253,13 @@ pub fn report(problems: &mut Problems) {
 
     for problem in problems.get_ref() {
         match problem {
+            NonExistingPackageInPkg5(fmri, path) => {
+                error!(
+                    "package {} does not exist, but it is in the pkg5 file: {}/pkg5",
+                    fmri,
+                    path.display()
+                )
+            }
             PackageInMultipleComponents(fmri, components) => {
                 error!(
                     "package {} is in multiple components: {}",

@@ -6,6 +6,7 @@ use std::{
 
 use fmri::{fmri_list::FMRIList, FMRI};
 
+use crate::problems::Problem::NonExistingPackageInPkg5;
 use crate::{
     assets::catalogs_c::open_json_file,
     problems::{
@@ -197,6 +198,25 @@ impl ComponentPackagesList {
                     fmri.clone(),
                     components.into_iter().cloned().collect::<Vec<String>>(),
                 ));
+            }
+        }
+    }
+
+    pub fn non_existing_packages_in_pkg5(&self, problems: &mut Problems, components: &Components) {
+        for a in self.get() {
+            for fmri in a.packages_in_component.get_ref() {
+                if components.is_fmri_obsoleted(fmri) {
+                    continue;
+                }
+
+                if components.check_if_fmri_exists_as_package(fmri) {
+                    continue;
+                }
+
+                problems.add_problem(NonExistingPackageInPkg5(
+                    fmri.clone(),
+                    a.path_to_component.clone(),
+                ))
             }
         }
     }
