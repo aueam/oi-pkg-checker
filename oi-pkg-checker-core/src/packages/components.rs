@@ -235,11 +235,11 @@ impl Components {
         for component in self.get_ref() {
             for package_version in component.get_versions_ref() {
                 for package in package_version.get_packages_ref() {
-                    if !package.fmri_ref().package_name_eq(fmri) {
+                    if !package.fmri_ref().package_name_eq(fmri) && !package.is_obsolete() {
                         if let Some(dependencies) = package.is_fmri_needed_as_dependency(self, fmri)
                         {
-                            for (fmri, d_type, dependency, renamed) in dependencies {
-                                list.push((fmri, d_type, dependency, renamed))
+                            for (fmri, d_type, dependency) in dependencies {
+                                list.push((fmri, d_type, dependency, package.is_renamed()))
                             }
                         }
                     }

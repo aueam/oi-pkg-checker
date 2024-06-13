@@ -44,45 +44,30 @@ impl Package {
         &self,
         components: &Components,
         fmri: &FMRI,
-    ) -> Option<Vec<(FMRI, String, Dependency, bool)>> {
+    ) -> Option<Vec<(FMRI, String, Dependency)>> {
         // TODO: what to do if a package is dependent on itself?
 
-        let mut required_dependencies: Vec<(FMRI, String, Dependency, bool)> = Vec::new();
+        let mut required_dependencies: Vec<(FMRI, String, Dependency)> = Vec::new();
 
         if let Some(dependency) = self
             .get_runtime_dependencies_as_struct()
             .is_fmri_needed_as_dependency(components, fmri)
         {
-            required_dependencies.push((
-                self.clone().fmri(),
-                "RUNTIME".to_owned(),
-                dependency,
-                self.is_obsolete(),
-            ));
+            required_dependencies.push((self.clone().fmri(), "RUNTIME".to_owned(), dependency));
         }
 
         if let Some(dependency) = self
             .get_build_dependencies_as_struct()
             .is_fmri_needed_as_dependency(components, fmri)
         {
-            required_dependencies.push((
-                self.clone().fmri(),
-                "BUILD".to_owned(),
-                dependency,
-                self.is_obsolete(),
-            ));
+            required_dependencies.push((self.clone().fmri(), "BUILD".to_owned(), dependency));
         }
 
         if let Some(dependency) = self
             .get_test_dependencies_as_struct()
             .is_fmri_needed_as_dependency(components, fmri)
         {
-            required_dependencies.push((
-                self.clone().fmri(),
-                "TEST".to_owned(),
-                dependency,
-                self.is_obsolete(),
-            ));
+            required_dependencies.push((self.clone().fmri(), "TEST".to_owned(), dependency));
         }
 
         if let Some(dependency) = self
@@ -93,7 +78,6 @@ impl Package {
                 self.clone().fmri(),
                 "SYSTEM-BUILD".to_owned(),
                 dependency,
-                self.is_obsolete(),
             ));
         }
 
@@ -101,12 +85,7 @@ impl Package {
             .get_system_test_dependencies_as_struct()
             .is_fmri_needed_as_dependency(components, fmri)
         {
-            required_dependencies.push((
-                self.clone().fmri(),
-                "SYSTEM-TEST".to_owned(),
-                dependency,
-                self.is_obsolete(),
-            ));
+            required_dependencies.push((self.clone().fmri(), "SYSTEM-TEST".to_owned(), dependency));
         }
 
         if required_dependencies.is_empty() {
