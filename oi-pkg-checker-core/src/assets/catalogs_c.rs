@@ -18,7 +18,7 @@ enum Attribute {
     Name(String),
     Value(String),
     Predicate(FMRI),
-    Other(String, String),
+    Other,
 }
 
 struct Attributes(Vec<Attribute>);
@@ -56,7 +56,7 @@ impl Attributes {
                 "predicate" => Attribute::Predicate(FMRI::parse_raw(value).unwrap()),
                 _ => {
                     debug!("Unknown attribute found: {} value: {}", attribute, value);
-                    Attribute::Other(attribute.to_owned(), value.to_owned())
+                    Attribute::Other
                 }
             };
 
