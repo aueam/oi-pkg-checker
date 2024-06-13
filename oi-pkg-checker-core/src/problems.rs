@@ -35,7 +35,7 @@ pub enum Problem {
     PartlyObsoletedRequiredByRenamed(DependTypes, DependencyTypes, FMRI),
     UselessComponent(String),
     PackageInMultipleComponents(FMRI, Vec<String>),
-    NonExistingPackageInPkg5(FMRI, PathBuf),
+    NonExistingPackageInPkg5(FMRI, String),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -253,11 +253,10 @@ pub fn report(problems: &mut Problems) {
 
     for problem in problems.get_ref() {
         match problem {
-            NonExistingPackageInPkg5(fmri, path) => {
+            NonExistingPackageInPkg5(fmri, component_name) => {
                 error!(
-                    "package {} does not exist, but it is in the pkg5 file: {}/pkg5",
-                    fmri,
-                    path.display()
+                    "package {} does not exist but it is in the pkg5, component: {}",
+                    fmri, component_name
                 )
             }
             PackageInMultipleComponents(fmri, components) => {

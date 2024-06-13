@@ -4,11 +4,13 @@ use std::{
     process::Command,
 };
 
-use fmri::{fmri_list::FMRIList, FMRI};
+use fmri::{FMRI, fmri_list::FMRIList};
 
-use crate::problems::Problem::NonExistingPackageInPkg5;
 use crate::{
     assets::catalogs_c::open_json_file,
+    Components,
+    Dependencies, DependencyTypes, DependencyTypes::{Build, SystemBuild, SystemTest, Test},
+    PackageVersions,
     problems::{
         Problem::{
             MissingComponentForPackage, ObsoletedPackageInComponent, PackageInMultipleComponents,
@@ -16,10 +18,8 @@ use crate::{
         },
         Problems,
     },
-    Components, Dependencies, DependencyTypes,
-    DependencyTypes::{Build, SystemBuild, SystemTest, Test},
-    PackageVersions,
 };
+use crate::problems::Problem::NonExistingPackageInPkg5;
 
 #[derive(Clone, Debug)]
 pub struct ComponentPackagesList(Vec<ComponentPackages>);
@@ -203,8 +203,8 @@ impl ComponentPackagesList {
     }
 
     pub fn non_existing_packages_in_pkg5(&self, problems: &mut Problems, components: &Components) {
-        for a in self.get() {
-            for fmri in a.packages_in_component.get_ref() {
+        for component_packages in self.get() {
+            for fmri in component_packages.packages_in_component.get_ref() {
                 if components.is_fmri_obsoleted(fmri) {
                     continue;
                 }
@@ -215,7 +215,7 @@ impl ComponentPackagesList {
 
                 problems.add_problem(NonExistingPackageInPkg5(
                     fmri.clone(),
-                    a.path_to_component.clone(),
+                    component_packages.component_name.clone(),
                 ))
             }
         }
