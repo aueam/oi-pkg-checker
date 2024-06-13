@@ -17,12 +17,12 @@ use crate::{
         catalogs_c::load_catalog_c,
         open_indiana_oi_userland_git::{component_list, ComponentPackagesList, load_dependencies},
     },
+    DependTypes,
     packages::{
         component::Component, dependency::Dependency, dependency_type::DependencyTypes,
         package_versions::PackageVersions,
     },
-    Problems,
-    problems::Problem::{RenamedNeedsRenamed, UselessComponent},
+    Problems, problems::Problem::{RenamedNeedsRenamed, UselessComponent},
 };
 
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
@@ -211,6 +211,7 @@ impl Components {
     //     Some(cycles)
     // }
 
+    /// ignores incorporate dependencies
     pub fn is_fmri_required_dependency(&self, fmri: &FMRI) -> bool {
         for component in self.get_ref() {
             for package_version in component.get_versions_ref() {
@@ -218,7 +219,14 @@ impl Components {
                     if !package.fmri_ref().package_name_eq(fmri) {
                         match package.is_fmri_needed_as_dependency(self, fmri) {
                             None => {}
-                            Some(_) => return true,
+                            Some(a) => {
+                                for (_, _, b) in a {
+                                    match b.get_ref() {
+                                        DependTypes::Incorporate(_) => {}
+                                        _ => return true,
+                                    }
+                                }
+                            }
                         }
                     }
                 }
