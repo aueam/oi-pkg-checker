@@ -7,7 +7,7 @@ use std::{
 };
 
 use bincode::{deserialize, serialize};
-use fmri::{fmri_list::FMRIList, FMRI};
+use fmri::{FMRI, fmri_list::FMRIList};
 use log::debug;
 use serde::{Deserialize, Serialize};
 
@@ -15,14 +15,14 @@ use crate::{
     assets::{
         assets_types::AssetTypes,
         catalogs_c::load_catalog_c,
-        open_indiana_oi_userland_git::{component_list, load_dependencies, ComponentPackagesList},
+        open_indiana_oi_userland_git::{component_list, ComponentPackagesList, load_dependencies},
     },
+    DependTypes,
     packages::{
         component::Component, dependency::Dependency, dependency_type::DependencyTypes,
         package_versions::PackageVersions,
     },
-    problems::Problem::{RenamedNeedsRenamed, UselessComponent},
-    DependTypes, Problems,
+    Problems, problems::Problem::{RenamedNeedsRenamed, UselessComponent},
 };
 
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
@@ -140,7 +140,7 @@ impl Components {
     }
 
     pub fn get_useless_components(&self, problems: &mut Problems) {
-        for component in self.get_ref() {
+        'outer: for component in self.get_ref() {
             if component.get_name_ref() == "" {
                 continue;
             }
@@ -148,6 +148,10 @@ impl Components {
             let mut number_of_package_versions = component.get_versions_ref().len();
 
             for package_version in component.get_versions_ref() {
+                if package_version.is_renamed() || package_version.is_obsolete() {
+                    continue 'outer;
+                }
+
                 if !self.is_fmri_required_dependency(package_version.fmri_ref()) {
                     number_of_package_versions -= 1;
                 }
