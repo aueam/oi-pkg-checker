@@ -1,6 +1,6 @@
 [package]
 name = "oi-pkg-checker-core"
-version = "0.2.1"
+version = "1.0.0"
 edition = "2021"
 authors = ["Maroš Telka <maros@telka.sk>"]
 description = "Core lib for oi-pkg-checker project"
