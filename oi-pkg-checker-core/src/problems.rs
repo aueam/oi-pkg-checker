@@ -148,7 +148,7 @@ impl Problems {
         self.0.contains(problem)
     }
 
-    fn sort(&mut self) {
+    pub fn sort(&mut self) {
         let priority = |item: &Problem| -> usize {
             match item {
                 UselessComponent(_) => 0,
@@ -212,6 +212,71 @@ impl Problems {
             }
         }
     }
+
+    pub fn get_problems_related_to_fmri(&self, fmri: &FMRI) -> Vec<Problem> {
+        let mut problems: Vec<Problem> = Vec::new();
+        for problem in self.get_ref() {
+            match problem {
+                UselessComponent(_) => {}
+                UnRunnableMakeCommand(_, _) => {}
+                NonExistingPackageInPkg5(f, _)
+                | PackageInMultipleComponents(f, _)
+                | MissingComponentForPackage(f)
+                | RenamedPackageInComponent(f, _)
+                | ObsoletedPackageInComponent(f, _) => {
+                    if f.package_name_eq(fmri) {
+                        problems.push(problem.clone());
+                    }
+                }
+                RenamedNeedsRenamed(f_a, f_b) => {
+                    if f_a.package_name_eq(fmri) || f_b.package_name_eq(fmri) {
+                        problems.push(problem.clone());
+                    }
+                }
+                NonExistingRequired(depend_type, _, f, _)
+                | NonExistingRequiredByRenamed(depend_type, _, f)
+                | ObsoletedRequired(depend_type, _, f, _)
+                | ObsoletedRequiredByRenamed(depend_type, _, f)
+                | PartlyObsoletedRequired(depend_type, _, f, _)
+                | PartlyObsoletedRequiredByRenamed(depend_type, _, f) => {
+                    if f.package_name_eq(fmri) {
+                        problems.push(problem.clone());
+                        continue;
+                    }
+
+                    match depend_type {
+                        DependTypes::Require(f)
+                        | DependTypes::Optional(f)
+                        | DependTypes::Exclude(f)
+                        | DependTypes::Incorporate(f)
+                        | DependTypes::Origin(f)
+                        | DependTypes::Group(f)
+                        | DependTypes::Parent(f) => {
+                            if f.package_name_eq(fmri) {
+                                problems.push(problem.clone());
+                            }
+                        }
+                        DependTypes::RequireAny(f_list) => {
+                            if f_list.contains(fmri) {
+                                problems.push(problem.clone());
+                            }
+                        }
+                        DependTypes::GroupAny(f_list) => {
+                            if f_list.contains(fmri) {
+                                problems.push(problem.clone());
+                            }
+                        }
+                        DependTypes::Conditional(f, predicate) => {
+                            if f.package_name_eq(fmri) || predicate.package_name_eq(fmri) {
+                                problems.push(problem.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        problems
+    }
 }
 
 impl Default for Problems {
@@ -220,222 +285,223 @@ impl Default for Problems {
     }
 }
 
-pub fn report(problems: &mut Problems) {
-    problems.sort();
-
+pub fn report(problems: &Problems) {
     for problem in problems.get_ref() {
-        match problem {
-            NonExistingPackageInPkg5(fmri, component_name) => {
-                error!(
-                    "package {} does not exist but it is in the pkg5, component: {}",
-                    fmri, component_name
-                )
-            }
-            PackageInMultipleComponents(fmri, components) => {
-                error!(
-                    "package {} is in multiple components: {}",
-                    fmri,
-                    components.join(",")
-                )
-            }
-            UselessComponent(name) => info!("component {} is not needed by any package", name),
-            MissingComponentForPackage(fmri) => warn!("missing component for {}", fmri),
-            RenamedNeedsRenamed(fmri_a, fmri_b) => error!(
-                "renamed package {} needs renamed package {}",
-                fmri_a.get_package_name_as_ref_string(),
-                fmri_b.get_package_name_as_ref_string()
-            ),
-            RenamedPackageInComponent(package, component) => error!(
-                "package {} is renamed and is in component {}",
-                package.get_package_name_as_ref_string(),
-                component
-            ),
-            ObsoletedPackageInComponent(package, component) => error!(
-                "package {} is obsolete and is in component {}",
-                package.get_package_name_as_ref_string(),
-                component
-            ),
-            UnRunnableMakeCommand(command, path) => error!("can't run {} in {:?}", command, path),
+        report_problem(problem);
+    }
+    problems.count();
+}
 
-            NonExistingRequired(depend_type, dependency_type, required_by, component_name) => {
-                let (name, fmri) = depend_type.clone().get_name_and_content_as_string();
+pub fn report_problem(problem: &Problem) {
+    match problem {
+        NonExistingPackageInPkg5(fmri, component_name) => {
+            error!(
+                "package {} does not exist but it is in the pkg5, component: {}",
+                fmri, component_name
+            )
+        }
+        PackageInMultipleComponents(fmri, components) => {
+            error!(
+                "package {} is in multiple components: {}",
+                fmri,
+                components.join(",")
+            )
+        }
+        UselessComponent(name) => info!("component {} is not needed by any package", name),
+        MissingComponentForPackage(fmri) => warn!("missing component for {}", fmri),
+        RenamedNeedsRenamed(fmri_a, fmri_b) => error!(
+            "renamed package {} needs renamed package {}",
+            fmri_a.get_package_name_as_ref_string(),
+            fmri_b.get_package_name_as_ref_string()
+        ),
+        RenamedPackageInComponent(package, component) => error!(
+            "package {} is renamed and is in component {}",
+            package.get_package_name_as_ref_string(),
+            component
+        ),
+        ObsoletedPackageInComponent(package, component) => error!(
+            "package {} is obsolete and is in component {}",
+            package.get_package_name_as_ref_string(),
+            component
+        ),
+        UnRunnableMakeCommand(command, path) => error!("can't run {} in {:?}", command, path),
 
-                let package_or_component_name = if dependency_type == &DependencyTypes::Runtime {
-                    required_by.get_package_name_as_ref_string().clone()
-                } else {
-                    format!("component {}", component_name)
-                };
+        NonExistingRequired(depend_type, dependency_type, required_by, component_name) => {
+            let (name, fmri) = depend_type.clone().get_name_and_content_as_string();
 
-                warn!(
-                    "package {} doesn't exist, but is required by {}",
-                    fmri,
-                    match dependency_type {
-                        DependencyTypes::Runtime => {
-                            format!("package {} (runtime, {})", package_or_component_name, name)
-                        }
-                        DependencyTypes::Build => {
-                            format!("{} (build, component)", package_or_component_name)
-                        }
-                        DependencyTypes::Test => {
-                            format!("{} (test, component)", package_or_component_name)
-                        }
-                        DependencyTypes::SystemBuild => {
-                            format!("{} (build, system)", package_or_component_name)
-                        }
-                        DependencyTypes::SystemTest => {
-                            format!("{} (test, system)", package_or_component_name)
-                        }
+            let package_or_component_name = if dependency_type == &DependencyTypes::Runtime {
+                required_by.get_package_name_as_ref_string().clone()
+            } else {
+                format!("component {}", component_name)
+            };
+
+            warn!(
+                "package {} doesn't exist, but is required by {}",
+                fmri,
+                match dependency_type {
+                    DependencyTypes::Runtime => {
+                        format!("package {} (runtime, {})", package_or_component_name, name)
                     }
-                )
-            }
-            NonExistingRequiredByRenamed(depend_type, dependency_type, required_by) => {
-                let (name, fmri) = depend_type.clone().get_name_and_content_as_string();
-
-                let package_name = required_by.get_package_name_as_ref_string();
-
-                warn!(
-                    "package {} doesn't exist, but is required by renamed package {}",
-                    fmri,
-                    match dependency_type {
-                        DependencyTypes::Runtime => {
-                            format!("{} (runtime, {})", package_name, name)
-                        }
-                        DependencyTypes::Build => {
-                            format!("{} (build, {})", package_name, name)
-                        }
-                        DependencyTypes::Test => {
-                            format!("{} (test, {})", package_name, name)
-                        }
-                        DependencyTypes::SystemBuild => {
-                            format!("{} (system-build)", package_name)
-                        }
-                        DependencyTypes::SystemTest => {
-                            format!("{} (system-test)", package_name)
-                        }
+                    DependencyTypes::Build => {
+                        format!("{} (build, component)", package_or_component_name)
                     }
-                )
-            }
-
-            ObsoletedRequired(depend_type, dependency_type, required_by, component_name) => {
-                let (name, fmri) = depend_type.clone().get_name_and_content_as_string();
-
-                let package_or_component_name = if dependency_type == &DependencyTypes::Runtime {
-                    required_by.get_package_name_as_ref_string().clone()
-                } else {
-                    format!("component {}", component_name)
-                };
-
-                error!(
-                    "obsoleted package {} is required by {}",
-                    fmri,
-                    match dependency_type {
-                        DependencyTypes::Runtime => {
-                            format!("package {} (runtime, {})", package_or_component_name, name)
-                        }
-                        DependencyTypes::Build => {
-                            format!("{} (build, component)", package_or_component_name)
-                        }
-                        DependencyTypes::Test => {
-                            format!("{} (test, component)", package_or_component_name)
-                        }
-                        DependencyTypes::SystemBuild => {
-                            format!("{} (build, system)", package_or_component_name)
-                        }
-                        DependencyTypes::SystemTest => {
-                            format!("{} (test, system)", package_or_component_name)
-                        }
+                    DependencyTypes::Test => {
+                        format!("{} (test, component)", package_or_component_name)
                     }
-                );
-            }
-
-            ObsoletedRequiredByRenamed(depend_type, dependency_type, required_by) => {
-                let (name, fmri) = depend_type.clone().get_name_and_content_as_string();
-
-                let package_name = required_by.get_package_name_as_ref_string();
-
-                error!(
-                    "obsoleted package {} is required by renamed package {}",
-                    fmri,
-                    match dependency_type {
-                        DependencyTypes::Runtime => {
-                            format!("{} (runtime, {})", package_name, name)
-                        }
-                        DependencyTypes::Build => {
-                            format!("{} (build, component)", package_name)
-                        }
-                        DependencyTypes::Test => {
-                            format!("{} (test, component)", package_name)
-                        }
-                        DependencyTypes::SystemBuild => {
-                            format!("{} (system-build, system)", package_name)
-                        }
-                        DependencyTypes::SystemTest => {
-                            format!("{} (system-test, system)", package_name)
-                        }
+                    DependencyTypes::SystemBuild => {
+                        format!("{} (build, system)", package_or_component_name)
                     }
-                );
-            }
-
-            PartlyObsoletedRequired(depend_type, dependency_type, required_by, component_name) => {
-                let (name, fmri) = depend_type.clone().get_name_and_content_as_string();
-
-                let package_or_component_name = if dependency_type == &DependencyTypes::Runtime {
-                    required_by.get_package_name_as_ref_string().clone()
-                } else {
-                    format!("component {}", component_name)
-                };
-
-                warn!(
-                    "obsoleted package {} is required by {}",
-                    fmri,
-                    match dependency_type {
-                        DependencyTypes::Runtime => {
-                            format!("package {} (runtime, {})", package_or_component_name, name)
-                        }
-                        DependencyTypes::Build => {
-                            format!("{} (build, component)", package_or_component_name)
-                        }
-                        DependencyTypes::Test => {
-                            format!("{} (test, component)", package_or_component_name)
-                        }
-                        DependencyTypes::SystemBuild => {
-                            format!("{} (build, system)", package_or_component_name)
-                        }
-                        DependencyTypes::SystemTest => {
-                            format!("{} (test, system)", package_or_component_name)
-                        }
+                    DependencyTypes::SystemTest => {
+                        format!("{} (test, system)", package_or_component_name)
                     }
-                );
-            }
-            PartlyObsoletedRequiredByRenamed(depend_type, dependency_type, required_by) => {
-                let (name, fmri) = depend_type.clone().get_name_and_content_as_string();
+                }
+            )
+        }
+        NonExistingRequiredByRenamed(depend_type, dependency_type, required_by) => {
+            let (name, fmri) = depend_type.clone().get_name_and_content_as_string();
 
-                let package_name = required_by.get_package_name_as_ref_string();
+            let package_name = required_by.get_package_name_as_ref_string();
 
-                warn!(
-                    "obsoleted package {} is required by renamed package {}",
-                    fmri,
-                    match dependency_type {
-                        DependencyTypes::Runtime => {
-                            format!("{} (runtime, {})", package_name, name)
-                        }
-                        DependencyTypes::Build => {
-                            format!("{} (build, component)", package_name)
-                        }
-                        DependencyTypes::Test => {
-                            format!("{} (test, component)", package_name)
-                        }
-                        DependencyTypes::SystemBuild => {
-                            format!("{} (system-build, system)", package_name)
-                        }
-                        DependencyTypes::SystemTest => {
-                            format!("{} (system-test, system)", package_name)
-                        }
+            warn!(
+                "package {} doesn't exist, but is required by renamed package {}",
+                fmri,
+                match dependency_type {
+                    DependencyTypes::Runtime => {
+                        format!("{} (runtime, {})", package_name, name)
                     }
-                );
-            }
+                    DependencyTypes::Build => {
+                        format!("{} (build, {})", package_name, name)
+                    }
+                    DependencyTypes::Test => {
+                        format!("{} (test, {})", package_name, name)
+                    }
+                    DependencyTypes::SystemBuild => {
+                        format!("{} (system-build)", package_name)
+                    }
+                    DependencyTypes::SystemTest => {
+                        format!("{} (system-test)", package_name)
+                    }
+                }
+            )
+        }
+
+        ObsoletedRequired(depend_type, dependency_type, required_by, component_name) => {
+            let (name, fmri) = depend_type.clone().get_name_and_content_as_string();
+
+            let package_or_component_name = if dependency_type == &DependencyTypes::Runtime {
+                required_by.get_package_name_as_ref_string().clone()
+            } else {
+                format!("component {}", component_name)
+            };
+
+            error!(
+                "obsoleted package {} is required by {}",
+                fmri,
+                match dependency_type {
+                    DependencyTypes::Runtime => {
+                        format!("package {} (runtime, {})", package_or_component_name, name)
+                    }
+                    DependencyTypes::Build => {
+                        format!("{} (build, component)", package_or_component_name)
+                    }
+                    DependencyTypes::Test => {
+                        format!("{} (test, component)", package_or_component_name)
+                    }
+                    DependencyTypes::SystemBuild => {
+                        format!("{} (build, system)", package_or_component_name)
+                    }
+                    DependencyTypes::SystemTest => {
+                        format!("{} (test, system)", package_or_component_name)
+                    }
+                }
+            );
+        }
+
+        ObsoletedRequiredByRenamed(depend_type, dependency_type, required_by) => {
+            let (name, fmri) = depend_type.clone().get_name_and_content_as_string();
+
+            let package_name = required_by.get_package_name_as_ref_string();
+
+            error!(
+                "obsoleted package {} is required by renamed package {}",
+                fmri,
+                match dependency_type {
+                    DependencyTypes::Runtime => {
+                        format!("{} (runtime, {})", package_name, name)
+                    }
+                    DependencyTypes::Build => {
+                        format!("{} (build, component)", package_name)
+                    }
+                    DependencyTypes::Test => {
+                        format!("{} (test, component)", package_name)
+                    }
+                    DependencyTypes::SystemBuild => {
+                        format!("{} (system-build, system)", package_name)
+                    }
+                    DependencyTypes::SystemTest => {
+                        format!("{} (system-test, system)", package_name)
+                    }
+                }
+            );
+        }
+
+        PartlyObsoletedRequired(depend_type, dependency_type, required_by, component_name) => {
+            let (name, fmri) = depend_type.clone().get_name_and_content_as_string();
+
+            let package_or_component_name = if dependency_type == &DependencyTypes::Runtime {
+                required_by.get_package_name_as_ref_string().clone()
+            } else {
+                format!("component {}", component_name)
+            };
+
+            warn!(
+                "obsoleted package {} is required by {}",
+                fmri,
+                match dependency_type {
+                    DependencyTypes::Runtime => {
+                        format!("package {} (runtime, {})", package_or_component_name, name)
+                    }
+                    DependencyTypes::Build => {
+                        format!("{} (build, component)", package_or_component_name)
+                    }
+                    DependencyTypes::Test => {
+                        format!("{} (test, component)", package_or_component_name)
+                    }
+                    DependencyTypes::SystemBuild => {
+                        format!("{} (build, system)", package_or_component_name)
+                    }
+                    DependencyTypes::SystemTest => {
+                        format!("{} (test, system)", package_or_component_name)
+                    }
+                }
+            );
+        }
+        PartlyObsoletedRequiredByRenamed(depend_type, dependency_type, required_by) => {
+            let (name, fmri) = depend_type.clone().get_name_and_content_as_string();
+
+            let package_name = required_by.get_package_name_as_ref_string();
+
+            warn!(
+                "obsoleted package {} is required by renamed package {}",
+                fmri,
+                match dependency_type {
+                    DependencyTypes::Runtime => {
+                        format!("{} (runtime, {})", package_name, name)
+                    }
+                    DependencyTypes::Build => {
+                        format!("{} (build, component)", package_name)
+                    }
+                    DependencyTypes::Test => {
+                        format!("{} (test, component)", package_name)
+                    }
+                    DependencyTypes::SystemBuild => {
+                        format!("{} (system-build, system)", package_name)
+                    }
+                    DependencyTypes::SystemTest => {
+                        format!("{} (system-test, system)", package_name)
+                    }
+                }
+            );
         }
     }
-
-    problems.count()
 }

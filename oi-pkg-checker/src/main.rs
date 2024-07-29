@@ -1,11 +1,14 @@
-use crate::{
-    cli::{Args, Commands},
-    logger::Logger,
+use std::{
+    path::{Path, PathBuf},
+    process::exit,
 };
+
 use clap::Parser;
 use colored::Colorize;
 use fmri::FMRI;
 use log::{debug, error, info, warn, LevelFilter};
+
+use oi_pkg_checker_core::problems::report_problem;
 use oi_pkg_checker_core::{
     assets::{catalogs_c::load_catalog_c, open_indiana_oi_userland_git::load_git},
     packages::{
@@ -16,9 +19,10 @@ use oi_pkg_checker_core::{
     },
     report,
 };
-use std::{
-    path::{Path, PathBuf},
-    process::exit,
+
+use crate::{
+    cli::{Args, Commands},
+    logger::Logger,
 };
 
 mod cli;
@@ -37,9 +41,7 @@ fn main() {
         match subcommand {
             Commands::PrintProblems { debug } => {
                 debug_on(debug);
-                let mut a = Components::deserialize(data_path).unwrap();
-
-                report(&mut a.problems);
+                report(&Components::deserialize(data_path).unwrap().problems);
             }
             Commands::CheckFMRI {
                 fmri,
@@ -167,6 +169,14 @@ fn main() {
                 } else {
                     warn!("missing component for package");
                 }
+
+                let problems = components.problems.get_problems_related_to_fmri(fmri);
+                if !problems.is_empty() {
+                    warn!("{}", "Problem/s related to this fmri:".bold());
+                    for problem in &problems {
+                        report_problem(problem);
+                    }
+                }
             }
             Commands::Run { catalog, debug } => {
                 debug_on(debug);
@@ -191,7 +201,8 @@ fn main() {
 
                 components.check_problems().unwrap();
 
-                report(&mut components.problems);
+                components.problems.sort();
+                report(&components.problems);
 
                 components.serialize(data_path).unwrap();
             }
