@@ -1,9 +1,7 @@
-pub mod component;
 pub mod components;
 mod cycles;
+mod de_serialization;
 pub mod depend_types;
-pub mod dependencies;
-pub mod dependency;
 pub mod dependency_type;
 pub mod package;
-pub mod package_versions;
+pub mod rev_depend_type;

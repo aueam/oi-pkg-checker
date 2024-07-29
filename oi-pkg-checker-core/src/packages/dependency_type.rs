@@ -1,5 +1,6 @@
-use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+
+use serde::{Deserialize, Serialize};
 
 /// Represents
 #[derive(PartialEq, Serialize, Deserialize, Clone, Debug, Ord, PartialOrd, Eq)]
@@ -9,10 +10,8 @@ pub enum DependencyTypes {
     Test,
     SystemBuild,
     SystemTest,
-    None,
 }
 
-/// Implementation of [`Display`]
 impl Display for DependencyTypes {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -24,7 +23,6 @@ impl Display for DependencyTypes {
                 DependencyTypes::Test => "test",
                 DependencyTypes::SystemBuild => "system-build",
                 DependencyTypes::SystemTest => "system-test",
-                DependencyTypes::None => "none",
             }
         )
     }

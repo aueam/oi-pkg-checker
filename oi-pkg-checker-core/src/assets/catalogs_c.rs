@@ -1,29 +1,106 @@
-use std::{env, fs::File, io::Read, path::PathBuf, process::exit};
+use std::{fs::File, io::Read, path::PathBuf};
 
 use fmri::{FMRI, FMRIList, Publisher, Version};
-use log::{debug, error};
+use log::debug;
 use serde_json::Value;
 
-use crate::{ComponentPackagesList, Problems, problems::Problem::RenamedPackageInComponent};
-use crate::packages::{
-    component::Component, components::Components, depend_types::DependTypes,
-    dependencies::Dependencies, dependency::Dependency, package::Package,
-    package_versions::PackageVersions,
+use crate::{
+    assets::catalogs_c::Name::{Obsolete, Other, Renamed},
+    packages::{
+        components::Components,
+        depend_types::DependTypes,
+        package::{Package, PackageVersion},
+    },
 };
 
-#[derive(Debug)]
-enum Attribute {
-    Fmri(FMRI),
-    DType(String),
-    Name(String),
-    Value(String),
-    Predicate(FMRI),
-    Other,
+/// for loading catalog into Components
+pub fn load_catalog_c(components: &mut Components, source_path: &PathBuf) -> Result<(), String> {
+    // open json file
+    let json_value = open_json_file(source_path)?;
+
+    // for every publisher(String) nad packages(Object) in json
+    for (publisher, packages) in json_value.as_object().ok_or("expect object")? {
+        // skip _SIGNATURE
+        if publisher == "_SIGNATURE" {
+            continue;
+        }
+
+        let publisher = Publisher::new(publisher.clone())
+            .map_err(|e| format!("failed to create publisher ({}): {}", publisher, e))?;
+
+        // for package_name(String), package_versions(Object) in packages
+        for (package_name, package_versions) in packages.as_object().ok_or("expect object")? {
+            // create fmri of package
+            let mut fmri = FMRI::parse_raw(package_name).map_err(|e| {
+                format!(
+                    "failed to parse fmri from package name ({}): {}",
+                    package_name, e
+                )
+            })?;
+            fmri.change_publisher(publisher.clone());
+
+            // create package with fmri
+            let mut package = Package::new(fmri.clone());
+
+            // for package_version(Object) in package_versions(Array)
+            for package_version in package_versions.as_array().ok_or("expect array")? {
+                let mut runtime_dependencies: Vec<DependTypes> = Vec::new();
+                let mut obsolete = false;
+                let mut renamed = false;
+
+                // for key(String)[actions|version] and value(array|String) in package_version
+                for (key, value) in package_version.as_object().ok_or("expect object")? {
+                    if key == "actions" {
+                        // get actions
+
+                        // for action(String) in actions(array)
+                        for action in value.as_array().ok_or("expect array")? {
+                            // parse action into dependency
+                            match parse_action(action.as_str().ok_or("expect str")?.to_owned())
+                                .map_err(|e| {
+                                    format!("failed to parse action ({}): {}", action, e)
+                                })? {
+                                ParsedAction::Dependency(d_type) => {
+                                    runtime_dependencies.push(*d_type);
+                                }
+                                ParsedAction::Obsolete => obsolete = true,
+                                ParsedAction::Renamed => renamed = true,
+                                ParsedAction::Other => {}
+                            }
+                        }
+                    } else if key == "version" {
+                        // get version
+
+                        // create package version with version
+                        let mut package_version = PackageVersion::new(
+                            Version::new(value.clone().as_str().ok_or("expect str")?.to_string())
+                                .map_err(|e| format!("failed to parse version: {}", e))?,
+                        );
+                        package_version.add_runtime_dependencies(&mut runtime_dependencies);
+                        package_version.set_obsolete(obsolete);
+                        package_version.set_renamed(renamed);
+
+                        package.add_package_version(package_version).map_err(|e| {
+                            format!("failed to add package version into package: {}", e)
+                        })?;
+                    } else {
+                        return Err(format!("unknown key: {} (expect version or actions)", key));
+                    }
+                }
+            }
+
+            // add new package
+            components.add_package(package);
+        }
+    }
+
+    components.remove_old_versions();
+    components.distribute_reverse_runtime_dependencies();
+
+    Ok(())
 }
 
-struct Attributes(Vec<Attribute>);
-
-enum Results {
+enum ParsedAction {
     Dependency(Box<DependTypes>),
     Obsolete,
     Renamed,
@@ -36,24 +113,62 @@ enum Name {
     Other,
 }
 
+fn parse_action(action: String) -> Result<ParsedAction, String> {
+    if action.starts_with("depend") {
+        return Ok(ParsedAction::Dependency(Box::new(
+            parse_depend(action.clone())
+                .map_err(|e| format!("failed to parse depend action: {}", e))?,
+        )));
+    }
+
+    if action.starts_with("set") {
+        return Ok(
+            match parse_set(action.clone())
+                .map_err(|e| format!("failed to parse set action: {}", e))?
+            {
+                Obsolete => ParsedAction::Obsolete,
+                Renamed => ParsedAction::Renamed,
+                Other => ParsedAction::Other,
+            },
+        );
+    }
+
+    Err(format!("other unknown action: {}", &action.clone()))
+}
+
+enum Attribute {
+    Fmri(FMRI),
+    DType(String),
+    Name(String),
+    Value(String),
+    Predicate(FMRI),
+    Other,
+}
+
+struct Attributes(Vec<Attribute>);
+
 impl Attributes {
     /// returns only fmri and type attribute
-    fn parse_attributes(attributes_string: String) -> Self {
+    fn parse_attributes(attributes_string: String) -> Result<Self, String> {
         let mut attributes = Self(vec![]);
 
         for attribute_value in attributes_string.split_whitespace() {
             if !attribute_value.contains('=') {
-                panic!("expected attribute, but it isn't!!! (attribute has \"=\")")
+                return Err("expected attribute, but it isn't! (attribute has \"=\")".to_owned());
             }
             let (attribute, value) = attribute_value
                 .split_once('=')
-                .expect("bad attribute value");
+                .ok_or("bad attribute value".to_string())?;
             let att = match attribute {
-                "fmri" => Attribute::Fmri(FMRI::parse_raw(value).unwrap()),
+                "fmri" => Attribute::Fmri(
+                    FMRI::parse_raw(value).map_err(|e| format!("failed to parse fmri: {}", e))?,
+                ),
                 "type" => Attribute::DType(value.to_owned()),
                 "name" => Attribute::Name(value.to_owned()),
                 "value" => Attribute::Value(value.to_owned()),
-                "predicate" => Attribute::Predicate(FMRI::parse_raw(value).unwrap()),
+                "predicate" => Attribute::Predicate(
+                    FMRI::parse_raw(value).map_err(|e| format!("failed to parse fmri: {}", e))?,
+                ),
                 _ => {
                     debug!("Unknown attribute found: {} value: {}", attribute, value);
                     Attribute::Other
@@ -63,20 +178,20 @@ impl Attributes {
             attributes.0.push(att)
         }
 
-        attributes
+        Ok(attributes)
     }
 
-    fn get_type_from_attributes(&self) -> &String {
-        for attribute in self.get() {
+    fn get_type_from_attributes(&self) -> Option<&String> {
+        for attribute in &self.0 {
             if let Attribute::DType(d_type) = attribute {
-                return d_type;
+                return Some(d_type);
             }
         }
-        panic!("in attributes is not type attribute!")
+        None
     }
 
     fn get_name_from_attributes(&self) -> Option<&String> {
-        for attribute in self.get() {
+        for attribute in &self.0 {
             if let Attribute::Name(name) = attribute {
                 return Some(name);
             }
@@ -84,256 +199,136 @@ impl Attributes {
         None
     }
 
-    fn get_value_from_attributes(&self) -> &String {
-        for attribute in self.get() {
+    fn get_value_from_attributes(&self) -> Option<&String> {
+        for attribute in &self.0 {
             if let Attribute::Value(value) = attribute {
-                return value;
+                return Some(value);
             }
         }
-        panic!("in attributes is not value attribute!")
+        None
     }
 
-    fn get_fmri_from_attributes(&self) -> FMRI {
-        for attribute in self.get() {
+    fn get_fmri_from_attributes(&self) -> Option<FMRI> {
+        for attribute in &self.0 {
             if let Attribute::Fmri(fmri) = attribute {
-                return fmri.clone();
+                return Some(fmri.clone());
             }
         }
-        panic!("cant find fmri attribute")
+        None
     }
 
-    fn get_predicate_from_attributes(&self) -> FMRI {
-        for attribute in self.get() {
+    fn get_predicate_from_attributes(&self) -> Option<FMRI> {
+        for attribute in &self.0 {
             if let Attribute::Predicate(fmri) = attribute {
-                return fmri.clone();
+                return Some(fmri.clone());
             }
         }
-        panic!("cant find fmri attribute")
+        None
+    }
+}
+
+/// parses set action
+fn parse_set(set: String) -> Result<Name, String> {
+    if !set.starts_with("set") {
+        return Err("trying to parse set action, but it is not set".to_owned());
     }
 
-    fn get(&self) -> &Vec<Attribute> {
-        &self.0
+    let attributes = Attributes::parse_attributes(set.trim_start_matches("set").to_owned())
+        .map_err(|e| format!("failed to parse attributes: {}", e))?;
+
+    if attributes
+        .get_name_from_attributes()
+        .ok_or("failed to get name attribute")?
+        == "pkg.obsolete"
+        && attributes
+            .get_value_from_attributes()
+            .ok_or("failed to get value attribute")?
+            == "true"
+    {
+        return Ok(Obsolete);
     }
+
+    if attributes
+        .get_name_from_attributes()
+        .ok_or("failed to get name attribute")?
+        == "pkg.renamed"
+        && attributes
+            .get_value_from_attributes()
+            .ok_or("failed to get value attribute")?
+            == "true"
+    {
+        return Ok(Renamed);
+    }
+
+    Ok(Other)
 }
 
 /// Returns only depend actions
 /// Parses "depend fmri=pkg:/system/library@0.5.11-2017.0.0.16778 type=require" into [`DependTypes`]
-fn parse_depend(depend: String) -> DependTypes {
+fn parse_depend(depend: String) -> Result<DependTypes, String> {
     if !depend.starts_with("depend") {
-        // action is not depend
-        panic!("bad function calling")
+        return Err("trying to parse depend action, but it is not depend".to_owned());
     }
 
-    let attributes = Attributes::parse_attributes(depend.trim_start_matches("depend").to_owned());
+    let attributes = Attributes::parse_attributes(depend.trim_start_matches("depend").to_owned())
+        .map_err(|e| format!("failed to parse attributes: {}", e))?;
 
-    let d_type = attributes.get_type_from_attributes();
+    let d_type = attributes
+        .get_type_from_attributes()
+        .ok_or("failed to get type attribute")?;
 
-    return match d_type.as_str() {
-        "require" => DependTypes::Require(attributes.get_fmri_from_attributes()),
-        "optional" => DependTypes::Optional(attributes.get_fmri_from_attributes()),
-        "incorporate" => DependTypes::Incorporate(attributes.get_fmri_from_attributes()),
+    return Ok(match d_type.as_str() {
+        "require" => DependTypes::Require(
+            attributes
+                .get_fmri_from_attributes()
+                .ok_or("failed to get fmri attribute")?,
+        ),
+        "optional" => DependTypes::Optional(
+            attributes
+                .get_fmri_from_attributes()
+                .ok_or("failed to get fmri attribute")?,
+        ),
+        "incorporate" => DependTypes::Incorporate(
+            attributes
+                .get_fmri_from_attributes()
+                .ok_or("failed to get fmri attribute")?,
+        ),
         "require-any" => {
             let mut fmri_list = FMRIList::new();
-            for attribute in attributes.get() {
+            for attribute in attributes.0 {
                 if let Attribute::Fmri(fmri) = attribute {
-                    fmri_list.add(fmri.clone())
+                    fmri_list.add(fmri)
                 }
             }
             if fmri_list.is_empty() {
-                panic!("cant find fmri attribute in require-any depend")
+                return Err("cant find fmri attribute in require-any depend".to_owned());
             }
             DependTypes::RequireAny(fmri_list)
         }
         "conditional" => DependTypes::Conditional(
-            attributes.get_fmri_from_attributes(),
-            attributes.get_predicate_from_attributes(),
+            attributes
+                .get_fmri_from_attributes()
+                .ok_or("failed to get fmri attribute")?,
+            attributes
+                .get_predicate_from_attributes()
+                .ok_or("failed to get predicate attribute")?,
         ),
-        "group" => DependTypes::Group(attributes.get_fmri_from_attributes()),
-        _ => panic!("unknown depend type: {}", d_type),
-    };
+        "group" => DependTypes::Group(
+            attributes
+                .get_fmri_from_attributes()
+                .ok_or("failed to get fmri attribute")?,
+        ),
+        _ => return Err(format!("unknown depend type: {}", d_type)),
+    });
 }
 
-fn parse_set(set: String) -> Name {
-    if !set.starts_with("set") {
-        // action is not set
-        panic!("bad function calling")
-    }
-
-    let attributes = Attributes::parse_attributes(set.trim_start_matches("set").to_owned());
-
-    match attributes.get_name_from_attributes() {
-        None => panic!("\"name\" is not in attributes"),
-        Some(name) => {
-            if name == "pkg.obsolete" && attributes.get_value_from_attributes() == "true" {
-                return Name::Obsolete;
-            }
-        }
-    }
-
-    match attributes.get_name_from_attributes() {
-        None => panic!("\"name\" is not in attributes"),
-        Some(name) => {
-            if name == "pkg.renamed" && attributes.get_value_from_attributes() == "true" {
-                return Name::Renamed;
-            }
-        }
-    }
-
-    Name::Other
-}
-
-fn parse_action(action: String) -> Results {
-    if action.starts_with("depend") {
-        return Results::Dependency(Box::new(parse_depend(action.clone())));
-    }
-
-    if action.starts_with("set") {
-        return match parse_set(action.clone()) {
-            Name::Obsolete => Results::Obsolete,
-            Name::Renamed => Results::Renamed,
-            Name::Other => Results::Other,
-        };
-    }
-
-    panic!("other unknown action: {}", &action.clone())
-}
-
-pub fn open_json_file(mut source_path: PathBuf) -> Value {
-    if !source_path.is_absolute() {
-        if let Ok(mut current_dir) = env::current_dir() {
-            current_dir.push(source_path);
-            source_path = current_dir;
-        } else {
-            error!("can not get current dir of {:?}", source_path);
-            exit(1);
-        }
-    }
-
-    // open file
-    let mut file = File::open(source_path.clone())
-        .unwrap_or_else(|_| panic!("failed to open file {:?}", source_path));
-
-    // get content
+pub fn open_json_file(source_path: &PathBuf) -> Result<Value, String> {
     let mut contains = String::new();
-    file.read_to_string(&mut contains)
-        .expect("failed to read file");
+    File::open(source_path.clone())
+        .map_err(|e| format!("failed to open file {}: {}", source_path.display(), e))?
+        .read_to_string(&mut contains)
+        .map_err(|e| format!("failed to read file {}: {}", source_path.display(), e))?;
 
-    // parse json and return
-    match serde_json::from_str::<Value>(&contains) {
-        Ok(json) => json,
-        Err(err) => {
-            error!(
-                "fatal invalid JSON found in {:?}, error: {}",
-                source_path, err
-            );
-            exit(1);
-        }
-    }
-}
-
-pub fn load_catalog_c(
-    components: &mut Components,
-    source_path: PathBuf,
-    problems: &mut Problems,
-    package_names_in_pkg5_list: &ComponentPackagesList,
-) {
-    // open json file
-    let json_value = open_json_file(source_path);
-
-    // for every publisher(String) nad packages(Object) in json
-    for (publisher, packages) in json_value.as_object().expect("expected object") {
-        // skip _SIGNATURE
-        if publisher == "_SIGNATURE" {
-            continue;
-        }
-
-        // for package_name(String), package_versions(Object) in packages
-        for (package_name, package_versions) in packages.as_object().expect("expected object") {
-            // create fmri of package
-            let mut fmri = FMRI::parse_raw(package_name).unwrap();
-            fmri.change_publisher(Publisher::new(publisher.clone()).unwrap());
-
-            // create package_versions with above fmri
-            let mut versions = PackageVersions::new(fmri.clone());
-
-            // for package_version(Object) in package_versions(Array)
-            for package_version in package_versions.as_array().expect("expected array") {
-                // Create dependencies
-                let mut dependencies = Dependencies::new();
-                let mut obsolete = false;
-                let mut renamed = false;
-
-                // for key(String)[actions|version] and value(array|String) in package_version
-                for (key, value) in package_version.as_object().expect("expected object") {
-                    if key == "actions" {
-                        // for action(String) in actions(array)
-                        for action in value.as_array().expect("array") {
-                            // parse action into dependency
-                            match parse_action(action.as_str().expect("str").to_owned()) {
-                                Results::Dependency(d_type) => {
-                                    dependencies.add(Dependency::new(&d_type));
-                                }
-                                Results::Obsolete => obsolete = true,
-                                Results::Renamed => renamed = true,
-                                Results::Other => {}
-                            }
-                        }
-                    } else if key == "version" {
-                        // get version of current package_version
-                        // it is changing on every package_version (will be used in *)
-                        fmri.change_version(
-                            Version::new(value.clone().as_str().expect("str").to_string()).unwrap(),
-                        );
-                    } else {
-                        panic!("unknown key: {}", key)
-                    }
-                }
-
-                // create package with fmri with version of current package_version (changed in *)
-                let mut package = Package::new(fmri.clone(), obsolete, renamed);
-
-                // add dependencies into package
-                package.add_runtime_dependencies(dependencies);
-
-                // add package into package_versions
-                match versions.add_package(package.clone()) {
-                    None => {}
-                    Some(_) => {
-                        // add obsolete
-                        components.add_obsoleted(package.clone().fmri());
-
-                        // TODO: RenamedPackageInComponent is already being collected in get_component_packages_of_package_versions (remove this?)
-                        if package.is_obsolete() {
-                            for component_packages in package_names_in_pkg5_list.get() {
-                                for package_in_pkg5 in
-                                    component_packages.packages_in_component.get_ref()
-                                {
-                                    if package.fmri_ref().get_package_name_as_ref_string()
-                                        == package_in_pkg5.get_package_name_as_ref_string()
-                                    {
-                                        problems.add_problem(RenamedPackageInComponent(
-                                            package.clone().fmri(),
-                                            component_packages.component_name.clone(),
-                                        ));
-                                    }
-                                }
-                            }
-                        } else {
-                            panic!("function .add_package() can return Some(_) only when obsolete package is entered")
-                        }
-                    }
-                }
-            }
-
-            // create new component with only one package_versions
-            let mut component = Component::new("".to_owned());
-            component.add(versions);
-
-            // add component into components
-            components.add(component);
-        }
-    }
-    // remove empty components and package versions
-    components.remove_empty_package_versions();
-    components.remove_empty_components();
+    serde_json::from_str::<Value>(&contains)
+        .map_err(|e| format!("invalid JSON found in {:?}: {}", source_path, e))
 }

@@ -1,280 +1,238 @@
 use std::{
-    collections::HashMap,
+    fs::File,
+    io::Read,
     path::{Path, PathBuf},
     process::Command,
 };
 
-use fmri::{FMRI, fmri_list::FMRIList};
+use fmri::FMRI;
+use log::warn;
 
 use crate::{
     assets::catalogs_c::open_json_file,
-    Components,
-    Dependencies, DependencyTypes, DependencyTypes::{Build, SystemBuild, SystemTest, Test},
-    PackageVersions,
-    problems::{
-        Problem::{
-            MissingComponentForPackage, ObsoletedPackageInComponent, PackageInMultipleComponents,
-            RenamedPackageInComponent, UnRunnableMakeCommand,
-        },
-        Problems,
+    packages::dependency_type::{
+        DependencyTypes,
+        DependencyTypes::{Build, Runtime, SystemBuild, SystemTest, Test},
     },
+    problems::{Problem::UnRunnableMakeCommand, Problems},
+    Components,
 };
-use crate::problems::Problem::NonExistingPackageInPkg5;
 
-#[derive(Clone, Debug)]
-pub struct ComponentPackagesList(Vec<ComponentPackages>);
+pub fn load_git(components: &mut Components, oi_userland_components: &Path) -> Result<(), String> {
+    let components_path = oi_userland_components.to_string_lossy();
 
-#[derive(Clone, Debug)]
-pub struct ComponentPackages {
-    pub component_name: String,
-    pub path_to_component: PathBuf,
-    pub packages_in_component: FMRIList,
-}
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "cd {} && rm -f components.mk ; gmake COMPONENTS_IGNORE=/dev/null components.mk",
+            components_path
+        ))
+        .output()
+        .map_err(|e| format!("failed to run command: {}", e))?;
 
-impl ComponentPackagesList {
-    pub fn new(oi_userland_components: &Path) -> Self {
-        let components_path = oi_userland_components.to_string_lossy();
+    if !output.stderr.is_empty() {
+        warn!(
+            "stderr of command \"sh -c cd {} && \
+        rm -f components.mk ; gmake COMPONENTS_IGNORE=/dev/null components.mk\" is not empty:\n{}",
+            components_path,
+            String::from_utf8(output.stderr)
+                .map_err(|e| format!("failed to get String from stderr: {}", e))?
+        )
+    }
 
-        let _output = Command::new("sh")
-            .arg("-c")
-            .arg(format!(
-                "cd {} && rm -f components.mk ; gmake COMPONENTS_IGNORE=/dev/null components.mk",
-                components_path
-            ))
-            .output()
-            .expect("failed to run command");
+    let mut component_list = String::new();
+    File::open(Path::new(&format!("{}/components.mk", components_path)))
+        .map_err(|e| {
+            format!(
+                "failed to open file {}/components.mk: {}",
+                components_path, e
+            )
+        })?
+        .read_to_string(&mut component_list)
+        .map_err(|e| format!("failed to read to String components.mk: {}", e))?;
 
-        // TODO: check output validity
-        // println!("{:?}", a);
+    for line in component_list.split('\n') {
+        if line.is_empty() {
+            continue;
+        }
 
-        let output = Command::new("cat")
-            .arg(format!("{}/components.mk", components_path.clone()))
-            .output()
-            .expect("failed to run command");
+        let component_name = line
+            .split_whitespace()
+            .last()
+            .ok_or(format!("failed to get component name from line: {}", line))?
+            .to_owned();
+        let component_path = format!("{}/{}", components_path, component_name);
 
-        let mut component_packages_list: Self = Self(vec![]);
+        let mut packages: Vec<FMRI> = Vec::new();
+        for fmri in open_json_file(&PathBuf::from(format!("{}/pkg5", component_path)))?
+            .as_object()
+            .ok_or("expect object")?
+            .get("fmris")
+            .ok_or("expect fmris")?
+            .as_array()
+            .ok_or("expect array")?
+        {
+            packages.push(
+                FMRI::parse_raw(fmri.as_str().ok_or("expect string")?)
+                    .map_err(|e| format!("failed to parse fmri: {}", e))?,
+            );
+        }
 
-        for line in String::from_utf8(output.stdout).unwrap().split('\n') {
+        components
+            .new_component(component_name.clone(), packages)
+            .map_err(|e| format!("failed to create new compoennt: {}", e))?;
+
+        let mut add_repo_dependencies = |dependency_type: &DependencyTypes| -> Result<(), String> {
+            let dependencies =
+                get_git_dependencies(&component_path, &mut components.problems, dependency_type)
+                    .map_err(|e| {
+                        format!(
+                            "failed to get {} dependencies from git: {}",
+                            dependency_type, e
+                        )
+                    })?;
+
+            components
+                .add_repo_dependencies(&component_name, dependencies, dependency_type)
+                .map_err(|e| {
+                    format!(
+                        "failed to add {} dependencies into component {}: {}",
+                        dependency_type, component_name, e
+                    )
+                })?;
+
+            Ok(())
+        };
+
+        add_repo_dependencies(&Build)?;
+        add_repo_dependencies(&Test)?;
+        add_repo_dependencies(&SystemBuild)?;
+        add_repo_dependencies(&SystemTest)?;
+    }
+
+    for component in components.clone().get_components() {
+        let a = component.borrow();
+
+        let history_file = format!("{}/{}/history", components_path, a.get_name());
+        let history_file_path = Path::new(&history_file);
+
+        if !history_file_path.exists() {
+            continue;
+        }
+
+        let mut history_content = String::new();
+        File::open(history_file_path)
+            .map_err(|e| {
+                format!(
+                    "failed to open history file {}: {}",
+                    history_file_path.display(),
+                    e
+                )
+            })?
+            .read_to_string(&mut history_content)
+            .map_err(|e| format!("failed to read to String components.mk: {}", e))?;
+
+        for line in history_content.split('\n') {
             if line.is_empty() {
+                // TODO: add warning?
                 continue;
             }
 
-            let component_name = line.split_whitespace().last().unwrap().to_owned();
-
-            let path_to_component =
-                PathBuf::from(format!("{}/{}", components_path, component_name));
-
-            let mut packages_in_component = FMRIList::new();
-            for fmri in open_json_file(
-                PathBuf::from(format!(
-                    "{}/pkg5",
-                    path_to_component.clone().to_string_lossy()
-                )), // pkg5 location
-            )
-            .as_object()
-            .expect("expect object")
-            .get("fmris")
-            .expect("expect fmris")
-            .as_array()
-            .expect("expect array")
-            {
-                packages_in_component
-                    .add(FMRI::parse_raw(fmri.as_str().expect("expect string")).unwrap())
-            }
-
-            component_packages_list.0.push(ComponentPackages {
-                component_name,
-                path_to_component,
-                packages_in_component,
-            });
-        }
-
-        component_packages_list
-    }
-
-    pub fn get(&self) -> &Vec<ComponentPackages> {
-        &self.0
-    }
-
-    pub fn get_component_packages_of_package_versions(
-        &self,
-        problems: &mut Problems,
-        package_versions: &PackageVersions,
-    ) -> Option<ComponentPackages> {
-        for component_packages in &self.0 {
-            for fmri in component_packages.packages_in_component.get_ref() {
-                if fmri.package_name_eq(package_versions.fmri_ref()) {
-                    if package_versions.is_renamed() || package_versions.is_obsolete() {
-                        if package_versions.is_renamed() {
-                            problems.add_problem(RenamedPackageInComponent(
-                                package_versions.clone().fmri(),
-                                component_packages.component_name.clone(),
-                            ));
-                        } else {
-                            problems.add_problem(ObsoletedPackageInComponent(
-                                package_versions.clone().fmri(),
-                                component_packages.component_name.clone(),
-                            ));
-                        }
-
-                        return None;
-                    }
-
-                    return Some(component_packages.clone());
-                }
-            }
-        }
-
-        if !package_versions.is_obsolete() && !package_versions.is_renamed() {
-            problems.add_problem(MissingComponentForPackage(package_versions.clone().fmri()));
-        }
-
-        None
-    }
-
-    fn get_dependencies_of_component(
-        &self,
-        problems: &mut Problems,
-        component_path: PathBuf,
-        dependencies_type: &DependencyTypes,
-    ) -> Result<FMRIList, ()> {
-        let mut make_command: String = "gmake ".to_owned();
-
-        #[cfg(target_os = "linux")]
-        make_command.push_str("GSED=/usr/bin/sed ");
-
-        make_command.push_str(match dependencies_type {
-            Build => "print-value-REQUIRED_PACKAGES",
-            Test => "print-value-TEST_REQUIRED_PACKAGES",
-            SystemBuild => "print-value-USERLAND_REQUIRED_PACKAGES",
-            SystemTest => "print-value-USERLAND_TEST_REQUIRED_PACKAGES",
-            _ => panic!(),
-        });
-
-        let command = Command::new("sh")
-            .arg("-c")
-            .arg(format!(
-                "cd {} && {}",
-                component_path.to_string_lossy(),
-                make_command
-            ))
-            .output()
-            .expect("failed to run command");
-
-        if command.status.code().unwrap() != 0 {
-            problems.add_problem(UnRunnableMakeCommand(
-                make_command.to_owned(),
-                component_path,
-            ));
-
-            return Err(());
-        }
-
-        let binding = String::from_utf8(command.stdout).unwrap();
-
-        let fmri_list: Vec<FMRI> = binding
-            .split_whitespace()
-            .map(|fmri| FMRI::parse_raw(fmri).unwrap())
-            .collect();
-
-        Ok(FMRIList::from(fmri_list))
-    }
-
-    /// finds same package in multiple components
-    pub fn same_packages_in_components(&self, problems: &mut Problems) {
-        let mut map: HashMap<&FMRI, Vec<&String>> = HashMap::new();
-
-        for component_packages in self.get() {
-            for fmri in component_packages.packages_in_component.get_ref() {
-                map.entry(fmri)
-                    .or_default()
-                    .push(&component_packages.component_name)
-            }
-        }
-
-        for (fmri, components) in map {
-            if components.len() > 1 {
-                problems.add_problem(PackageInMultipleComponents(
-                    fmri.clone(),
-                    components.into_iter().cloned().collect::<Vec<String>>(),
-                ));
-            }
-        }
-    }
-
-    pub fn non_existing_packages_in_pkg5(&self, problems: &mut Problems, components: &Components) {
-        for component_packages in self.get() {
-            for fmri in component_packages.packages_in_component.get_ref() {
-                if components.is_fmri_obsoleted(fmri) {
+            let history = line.split_whitespace().collect::<Vec<&str>>();
+            match (history.len(), history.as_slice()) {
+                (1, ["noincorporate"]) => {
+                    warn!("in history file ({}) is line with only \"noincorporate\", skipping this line", history_file_path.display());
                     continue;
                 }
+                (2, [raw_fmri, "noincorporate"]) | (1, [raw_fmri]) => {
+                    // obsolete package
 
-                if components.check_if_fmri_exists_as_package(fmri) {
+                    let fmri = FMRI::parse_raw(raw_fmri)
+                        .map_err(|e| format!("failed to parse fmri: {}", e))?;
+
+                    if !fmri.has_version() {
+                        todo!()
+                    }
+
+                    components
+                        .set_package_obsolete(fmri)
+                        .map_err(|e| format!("failed to set package obsolete: {}", e))?;
+                }
+                (3, [raw_fmri, _, "noincorporate"]) | (2, [raw_fmri, _]) => {
+                    // renamed package
+
+                    let fmri = FMRI::parse_raw(raw_fmri)
+                        .map_err(|e| format!("failed to parse fmri: {}", e))?;
+
+                    if !fmri.has_version() {
+                        todo!()
+                    }
+
+                    components
+                        .set_package_renamed(fmri)
+                        .map_err(|e| format!("failed to set package renamed: {}", e))?;
+                }
+                (l, _) if l > 3 => {
+                    warn!(
+                        "line in history file ({}) has more than 3 columns, skipping this line",
+                        history_file_path.display()
+                    );
                     continue;
                 }
-
-                problems.add_problem(NonExistingPackageInPkg5(
-                    fmri.clone(),
-                    component_packages.component_name.clone(),
-                ))
-            }
-        }
-    }
-}
-
-pub fn load_dependencies(
-    components: &mut Components,
-    problems: &mut Problems,
-    component_packages_list: &ComponentPackagesList,
-    dependencies_type: &DependencyTypes,
-) {
-    for component in components.get_ref_mut() {
-        for packet_versions in component.get_versions_ref_mut() {
-            if let Some(component_path) = component_packages_list
-                .get_component_packages_of_package_versions(problems, packet_versions)
-                .map(|component_packages| component_packages.path_to_component)
-            {
-                if let Ok(fmri_list) = component_packages_list.get_dependencies_of_component(
-                    problems,
-                    component_path,
-                    dependencies_type,
-                ) {
-                    let deps = Dependencies::new_from_fmri_list(fmri_list);
-
-                    for package in packet_versions.get_packages_ref_mut() {
-                        match dependencies_type {
-                            Build => package.add_build_dependencies(deps.clone()),
-                            Test => package.add_test_dependencies(deps.clone()),
-                            SystemBuild => package.add_system_build_dependencies(deps.clone()),
-                            SystemTest => package.add_system_test_dependencies(deps.clone()),
-                            _ => panic!("unsupported dependency type"),
-                        }
-                    }
+                (3, _) => {
+                    warn!("line in history file ({}) has 3 columns, but 3. is not \"noincorporate\", skipping this line", history_file_path.display());
+                    continue;
+                }
+                _ => {
+                    return Err(format!(
+                        "can not parse line from history file ({}): {}",
+                        history_file_path.display(),
+                        line
+                    ))
                 }
             }
         }
     }
+
+    Ok(())
 }
 
-pub fn component_list(
-    components: &mut Components,
+fn get_git_dependencies(
+    component_path: &String,
     problems: &mut Problems,
-    component_packages_list: &ComponentPackagesList,
-) {
-    let mut new_components = Components::new();
+    dependency_type: &DependencyTypes,
+) -> Result<Vec<FMRI>, String> {
+    let mut make_command: String = "gmake ".to_owned();
 
-    for component in components.get_ref() {
-        for package_version in component.get_versions_ref() {
-            new_components.add_package_to_component_with_name(
-                package_version,
-                component_packages_list
-                    .get_component_packages_of_package_versions(problems, package_version)
-                    .map(|component_packages| component_packages.component_name)
-                    .unwrap_or_else(|| "".to_owned()),
-            )
-        }
+    #[cfg(target_os = "linux")]
+    make_command.push_str("GSED=/usr/bin/sed ");
+
+    make_command.push_str(match dependency_type {
+        Runtime => return Err("can not find runtime dependencies in git".to_string()),
+        Build => "print-value-REQUIRED_PACKAGES",
+        Test => "print-value-TEST_REQUIRED_PACKAGES",
+        SystemBuild => "print-value-USERLAND_REQUIRED_PACKAGES",
+        SystemTest => "print-value-USERLAND_TEST_REQUIRED_PACKAGES",
+    });
+
+    let command = Command::new("sh")
+        .arg("-c")
+        .arg(format!("cd {} && {}", component_path, make_command))
+        .output()
+        .map_err(|e| format!("failed to run command: {}", e))?;
+
+    if command.status.code().ok_or("command terminated")? != 0 {
+        problems.add_problem(UnRunnableMakeCommand(
+            make_command.to_owned(),
+            PathBuf::from(component_path),
+        ));
     }
 
-    new_components.name_unnamed_components();
-    components.change(new_components.get());
+    let mut fmri_list: Vec<FMRI> = Vec::new();
+    for raw_fmri in String::from_utf8_lossy(&command.stdout).split_whitespace() {
+        fmri_list
+            .push(FMRI::parse_raw(raw_fmri).map_err(|e| format!("failed to parse fmri: {}", e))?);
+    }
+
+    Ok(fmri_list)
 }

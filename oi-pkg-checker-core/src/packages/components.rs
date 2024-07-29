@@ -1,595 +1,550 @@
-use std::{
-    cmp::Ordering,
-    fmt::{Display, Formatter},
-    fs::File,
-    io::{Read, Write},
-    path::Path,
+use crate::packages::{
+    dependency_type::{
+        DependencyTypes,
+        DependencyTypes::{Build, Runtime, SystemBuild, SystemTest, Test},
+    },
+    package::Package,
+    rev_depend_type::{RevDependType, RevDependType::*},
 };
-
-use bincode::{deserialize, serialize};
-use fmri::{FMRI, fmri_list::FMRIList};
-use log::debug;
-use serde::{Deserialize, Serialize};
-
 use crate::{
-    assets::{
-        assets_types::AssetTypes,
-        catalogs_c::load_catalog_c,
-        open_indiana_oi_userland_git::{component_list, ComponentPackagesList, load_dependencies},
+    problems::{
+        Problem,
+        Problem::{
+            MissingComponentForPackage, NonExistingPackageInPkg5, NonExistingRequired,
+            NonExistingRequiredByRenamed, ObsoletedPackageInComponent, ObsoletedRequired,
+            ObsoletedRequiredByRenamed, PartlyObsoletedRequired, PartlyObsoletedRequiredByRenamed,
+            RenamedNeedsRenamed, RenamedPackageInComponent, UselessComponent,
+        },
     },
-    DependTypes,
-    packages::{
-        component::Component, dependency::Dependency, dependency_type::DependencyTypes,
-        package_versions::PackageVersions,
-    },
-    Problems, problems::Problem::{RenamedNeedsRenamed, UselessComponent},
+    DependTypes, Problems,
+};
+use fmri::{FMRIList, FMRI};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    rc::{Rc, Weak},
 };
 
-#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub struct Components {
-    components: Vec<Component>,
-    obsolete: FMRIList,
+    /// components in system
+    pub(crate) components: Vec<Rc<RefCell<Component>>>,
+    pub(crate) hash_components: HashMap<String, Rc<RefCell<Component>>>,
+    /// packages in system
+    pub(crate) packages: Vec<Rc<RefCell<Package>>>,
+    pub(crate) hash_packages: HashMap<String, Rc<RefCell<Package>>>,
+    pub problems: Problems,
 }
 
 impl Components {
-    pub fn new() -> Self {
-        Self {
-            components: vec![],
-            obsolete: FMRIList::new(),
-        }
+    pub fn add_package(&mut self, package: Package) {
+        let package_name = package.fmri.clone().get_package_name_as_string();
+
+        // if package.obsolete {
+        //     self.add_obsolete(fmri.clone())
+        // }
+
+        // TODO: set package obsolete?
+
+        let rc_package = Rc::new(RefCell::new(package));
+
+        self.packages.push(Rc::clone(&rc_package));
+        self.hash_packages.insert(package_name, rc_package);
     }
 
-    pub fn load(
+    pub fn new_component(
         &mut self,
-        problems: &mut Problems,
-        asset: AssetTypes,
-        component_packages_list: &ComponentPackagesList,
-    ) {
-        match asset {
-            AssetTypes::Catalogs(paths) => {
-                for path in paths {
-                    load_catalog_c(self, path, problems, component_packages_list);
-                }
-            }
-            AssetTypes::OpenIndianaOiUserlandGit => {
-                component_list(self, problems, component_packages_list);
-                load_dependencies(
-                    self,
-                    problems,
-                    component_packages_list,
-                    &DependencyTypes::Build,
-                );
-                load_dependencies(
-                    self,
-                    problems,
-                    component_packages_list,
-                    &DependencyTypes::Test,
-                );
-                load_dependencies(
-                    self,
-                    problems,
-                    component_packages_list,
-                    &DependencyTypes::SystemBuild,
-                );
-                load_dependencies(
-                    self,
-                    problems,
-                    component_packages_list,
-                    &DependencyTypes::SystemTest,
-                );
-            }
-        }
-    }
-
-    pub fn serialize<P: AsRef<Path> + ?Sized>(&self, path: &P) {
-        File::create(path)
-            .unwrap()
-            .write_all(&serialize(self).expect("failed to serialize data into binary"))
-            .expect("TODO: panic message");
-    }
-
-    pub fn deserialize<P: AsRef<Path> + ?Sized>(path: &P) -> Self {
-        let data = &mut Vec::new();
-        File::open(path)
-            .expect("failed to open data file")
-            .read_to_end(data)
-            .expect("failed to read data");
-        deserialize(data).expect("failed to deserialize data from binary")
-    }
-
-    pub fn add_package_to_component_with_name(
-        &mut self,
-        package_versions: &PackageVersions,
         component_name: String,
-    ) {
-        if !component_name.is_empty() {
-            for component in self.get_ref_mut() {
-                if component.get_name_ref() == &component_name {
-                    debug!(
-                        "adding {} into component: {}",
-                        package_versions.fmri_ref(),
-                        component_name
-                    );
-                    component.add(package_versions.clone());
-                    return;
+        packages: Vec<FMRI>,
+    ) -> Result<(), String> {
+        let rc_component = Rc::new(RefCell::new(Component::new(component_name.clone())));
+
+        for fmri in packages {
+            let res = match self.get_package_by_fmri(&fmri) {
+                Ok(rc_package) => {
+                    rc_component
+                        .borrow_mut()
+                        .add_package(Rc::downgrade(rc_package));
+
+                    rc_package
+                        .borrow_mut()
+                        .set_component(Rc::clone(&rc_component))
                 }
-            }
-        }
-
-        let mut new_component = Component::new(component_name);
-        new_component.add(package_versions.clone());
-        self.add(new_component);
-    }
-
-    pub fn name_unnamed_components(&mut self) {
-        for component in self.get_ref_mut() {
-            if component.get_name_ref() == "" {
-                let package_versions = component.get_versions_ref();
-                assert_eq!(package_versions.len(), 1);
-                let name = "/".to_owned()
-                    + &*package_versions
-                        .first()
-                        .unwrap()
-                        .fmri_ref()
-                        .get_package_name_as_ref_string()
-                        .clone();
-                debug!("naming unnamed component with name: /{}", &name);
-                component.change_name(name);
-            }
-        }
-    }
-
-    pub fn get_useless_components(&self, problems: &mut Problems) {
-        'outer: for component in self.get_ref() {
-            if component.get_name_ref() == "" {
-                continue;
-            }
-
-            let mut number_of_package_versions = component.get_versions_ref().len();
-
-            for package_version in component.get_versions_ref() {
-                if package_version.is_renamed() || package_version.is_obsolete() {
-                    continue 'outer;
-                }
-
-                if !self.is_fmri_required_dependency(package_version.fmri_ref()) {
-                    number_of_package_versions -= 1;
-                }
-            }
-
-            if number_of_package_versions == 0 {
-                problems.add_problem(UselessComponent(component.clone().get_name()));
-            }
-        }
-    }
-
-    pub fn get_component_name_by_package(&self, package: &FMRI) -> Option<&String> {
-        for component in self.get_ref() {
-            for package_versions in component.get_versions_ref() {
-                if package_versions.fmri_ref().package_name_eq(package) {
-                    return Some(component.get_name_ref());
-                }
-            }
-        }
-
-        // info!("can't find package {} it is maybe obsolete", package);
-        None
-    }
-
-    // TODO: remake
-    // pub fn check_component_cycles(&self, components_path: &PathBuf, dependency_types: Vec<DependencyTypes>) -> Option<Vec<CycleRoute>> {
-    //     let counter: f32 = self.get_ref().len() as f32 / 100.;
-    //     let mut last: i32 = 0;
-    //     let cycle_routes = &mut Cycles::new();
-    //     let was_there = &mut vec![];
-    //     for (index, component) in self.get_ref().iter().enumerate() {
-    //         component.find_cycles(
-    //             cycle_routes,
-    //             was_there,
-    //             CycleRoute::new_empty(),
-    //             self,
-    //             dependency_types.clone(),
-    //         );
-    //
-    //         let update = index as f32 / counter;
-    //         if update as i32 > last {
-    //             last = update as i32;
-    //             info!("{}%", last);
-    //         }
-    //     }
-    //
-    //     info!("{}", was_there.len());
-    //
-    //     sleep(Duration::from_secs(5));
-    //
-    //     let mut cycles = cycle_routes.clone().get();
-    //
-    //     cycles.sort();
-    //     cycles.dedup();
-    //
-    //     if cycles.len() == 0 {
-    //         return None;
-    //     }
-    //     Some(cycles)
-    // }
-
-    /// ignores incorporate dependencies
-    pub fn is_fmri_required_dependency(&self, fmri: &FMRI) -> bool {
-        for component in self.get_ref() {
-            for package_version in component.get_versions_ref() {
-                for package in package_version.get_packages_ref() {
-                    if !package.fmri_ref().package_name_eq(fmri) {
-                        match package.is_fmri_needed_as_dependency(self, fmri) {
-                            None => {}
-                            Some(a) => {
-                                for (_, _, b) in a {
-                                    match b.get_ref() {
-                                        DependTypes::Incorporate(_) => {}
-                                        _ => return true,
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        false
-    }
-
-    pub fn get_dependencies_with_fmri(
-        &self,
-        fmri: &FMRI,
-    ) -> Option<Vec<(FMRI, String, Dependency, bool)>> {
-        let mut list: Vec<(FMRI, String, Dependency, bool)> = Vec::new();
-        for component in self.get_ref() {
-            for package_version in component.get_versions_ref() {
-                for package in package_version.get_packages_ref() {
-                    if !package.fmri_ref().package_name_eq(fmri) && !package.is_obsolete() {
-                        if let Some(dependencies) = package.is_fmri_needed_as_dependency(self, fmri)
-                        {
-                            for (fmri, d_type, dependency) in dependencies {
-                                list.push((fmri, d_type, dependency, package.is_renamed()))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if list.is_empty() {
-            return None;
-        }
-        Some(list)
-    }
-
-    pub fn check_dependency_validity(&self, problems: &mut Problems) {
-        for component in self.get_ref() {
-            for package_version in component.get_versions_ref() {
-                for package in package_version.get_packages_ref() {
-                    if package.is_obsolete() {
-                        panic!("package can't be obsolete")
-                    }
-
-                    for runtime in package.get_runtime_dependencies() {
-                        runtime.check_dependency_validity(
-                            self,
-                            problems,
-                            package.clone(),
-                            DependencyTypes::Runtime,
-                        )
-                    }
-
-                    for build in package.get_build_dependencies() {
-                        build.check_dependency_validity(
-                            self,
-                            problems,
-                            package.clone(),
-                            DependencyTypes::Build,
-                        )
-                    }
-
-                    for test in package.get_test_dependencies() {
-                        test.check_dependency_validity(
-                            self,
-                            problems,
-                            package.clone(),
-                            DependencyTypes::Test,
-                        )
-                    }
-
-                    for system_build in package.get_system_build_dependencies() {
-                        system_build.check_dependency_validity(
-                            self,
-                            problems,
-                            package.clone(),
-                            DependencyTypes::SystemBuild,
-                        )
-                    }
-
-                    for system_test in package.get_system_test_dependencies() {
-                        system_test.check_dependency_validity(
-                            self,
-                            problems,
-                            package.clone(),
-                            DependencyTypes::SystemTest,
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn remove_empty_components(&mut self) {
-        let mut components: Vec<Component> = vec![];
-        for component in self.clone().get() {
-            if !component.clone().get_versions().is_empty() {
-                components.push(component)
-            }
-        }
-        self.components = components
-    }
-
-    pub fn remove_empty_package_versions(&mut self) {
-        for component in self.get_ref_mut() {
-            let mut new_component: Vec<PackageVersions> = vec![];
-            for package_version in component.clone().get_versions() {
-                if !package_version.get_packages_ref().is_empty() {
-                    new_component.push(package_version)
-                }
-            }
-            component.change_versions(new_component)
-        }
-    }
-
-    pub fn is_there_newer_version(&self, fmri: &FMRI) -> Option<FMRI> {
-        for component in self.get_ref() {
-            for package_version in component.get_versions_ref() {
-                if package_version.fmri_ref().package_name_eq(fmri) {
-                    for package in package_version.get_packages_ref() {
-                        let self_fmri = package.fmri_ref().clone();
-                        match fmri.cmp(package.fmri_ref()) {
-                            Ordering::Less => {
-                                return Some(self_fmri);
-                            }
-                            Ordering::Greater | Ordering::Equal => {}
-                        }
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    pub fn check_require_dependency(&self, fmri: &FMRI, checking_fmri: &FMRI) -> bool {
-        if fmri.package_name_eq(checking_fmri) {
-            match fmri.cmp(checking_fmri) {
-                Ordering::Equal | Ordering::Less => {
-                    return self.is_there_newer_version(checking_fmri).is_none();
-                }
-                // dependency need greater version of fmri
-                Ordering::Greater => {}
-            };
-        }
-        false
-    }
-
-    pub fn check_if_renamed_needs_renamed(&self, problems: &mut Problems) {
-        let mut find_needed_package_closure =
-            |dependency: &Dependency, package_versions: &PackageVersions| match dependency
-                .get_ref()
-                .get_content_ref()
-            {
-                Ok(fmri) => {
-                    if let Some(needed_package_versions) = self.get_package_versions_from_fmri(fmri)
-                    {
-                        if needed_package_versions.is_renamed() {
-                            problems.add_problem(RenamedNeedsRenamed(
-                                package_versions.fmri_ref().clone(),
-                                needed_package_versions.fmri(),
-                            ));
-                        }
-                    }
-                }
-                Err(fmri_list) => {
-                    for fmri in fmri_list.get_ref() {
-                        match self.get_package_versions_from_fmri(fmri) {
-                            None => {}
-                            Some(needed_package_versions) => {
-                                if needed_package_versions.is_renamed() {
-                                    problems.add_problem(RenamedNeedsRenamed(
-                                        package_versions.fmri_ref().clone(),
-                                        needed_package_versions.fmri(),
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                }
+                Err(_) => Some(Box::new(NonExistingPackageInPkg5(
+                    fmri,
+                    component_name.clone(),
+                ))),
             };
 
-        for component in self.get_ref() {
-            for package_versions in component.get_versions_ref() {
-                if package_versions.is_renamed() {
-                    let package = package_versions.get_packages_ref().last().unwrap();
-
-                    for runtime in package.get_runtime_dependencies() {
-                        find_needed_package_closure(runtime, package_versions)
-                    }
-
-                    for build in package.get_build_dependencies() {
-                        find_needed_package_closure(build, package_versions)
-                    }
-
-                    for test in package.get_test_dependencies() {
-                        find_needed_package_closure(test, package_versions)
-                    }
-
-                    for system_build in package.get_system_build_dependencies() {
-                        find_needed_package_closure(system_build, package_versions)
-                    }
-
-                    for system_test in package.get_system_test_dependencies() {
-                        find_needed_package_closure(system_test, package_versions)
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn get_package_versions_from_fmri(&self, fmri: &FMRI) -> Option<PackageVersions> {
-        for component in self.get_ref() {
-            for package_versions in component.get_versions_ref() {
-                if package_versions.fmri_ref().package_name_eq(fmri) {
-                    return Some(package_versions.clone());
-                }
+            if let Some(p) = res {
+                self.problems.add_problem(*p);
             }
         }
 
-        None
+        self.components.push(Rc::clone(&rc_component));
+        self.hash_components.insert(component_name, rc_component);
+
+        Ok(())
     }
 
-    pub fn check_if_fmri_exists_as_package(&self, fmri: &FMRI) -> bool {
-        for component in self.get_ref() {
-            for package_versions in component.get_versions_ref() {
-                if package_versions.fmri_ref().package_name_eq(fmri) {
-                    return true;
-                }
-            }
-        }
-        false
+    pub fn get_component_by_name(&self, name: &String) -> Result<&Rc<RefCell<Component>>, String> {
+        return match self.hash_components.get(name) {
+            None => Err(format!("component {} does not exist", name)),
+            Some(component) => Ok(component),
+        };
     }
 
-    pub fn add(&mut self, component: Component) {
-        self.components.push(component)
+    pub fn get_package_by_fmri(&self, fmri: &FMRI) -> Result<&Rc<RefCell<Package>>, String> {
+        return match self
+            .hash_packages
+            .get(fmri.get_package_name_as_ref_string())
+        {
+            None => Err(format!("package {} does not exist", fmri)),
+            Some(package) => Ok(package),
+        };
     }
 
-    pub fn get_obsoleted_ref(&self) -> &FMRIList {
-        &self.obsolete
-    }
-
-    pub fn add_obsoleted(&mut self, fmri: FMRI) {
-        self.obsolete.add(fmri)
-    }
-
-    pub fn is_fmri_obsoleted(&self, fmri: &FMRI) -> bool {
-        self.obsolete.contains(fmri)
-    }
-
-    pub fn change(&mut self, new_components: Vec<Component>) {
-        self.components = new_components
-    }
-
-    pub fn get(self) -> Vec<Component> {
-        self.components
-    }
-
-    pub fn get_ref(&self) -> &Vec<Component> {
+    pub fn get_components(&self) -> &Vec<Rc<RefCell<Component>>> {
         &self.components
     }
 
-    pub fn get_ref_mut(&mut self) -> &mut Vec<Component> {
-        &mut self.components
-    }
-}
-
-impl Default for Components {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Display for Components {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut string: String = "".to_owned();
-
-        for (index, component) in self.get_ref().iter().enumerate() {
-            string.push_str(&format!(
-                "{}. component: {}\n",
-                index + 1,
-                component.get_name_ref()
-            ));
-            for package_versions in component.get_versions_ref() {
-                string.push_str(&format!(
-                    "  package_name: {}\n",
-                    package_versions.fmri_ref()
+    /// adds repo dependencies (Build, Test, System Build and System Test) into component
+    pub fn add_repo_dependencies(
+        &mut self,
+        component_name: &String,
+        dependencies: Vec<FMRI>,
+        dependency_type: &DependencyTypes,
+    ) -> Result<(), String> {
+        for fmri in dependencies {
+            let rc_package = if let Ok(p) = self.get_package_by_fmri(&fmri) {
+                p
+            } else {
+                self.problems.add_problem(NonExistingRequired(
+                    DependTypes::Require(fmri),
+                    dependency_type.clone(),
+                    FMRI::parse_raw("none").unwrap(),
+                    component_name.clone(),
                 ));
-                for package in package_versions.get_packages_ref() {
-                    string.push_str(&format!("    package: {}\n", package.fmri_ref()));
-                    for i in 0..5 {
-                        match i {
-                            0 => {
-                                let dp = package.get_runtime_dependencies().iter().enumerate();
-                                if dp.len() != 0 {
-                                    string.push_str("      runtime dependencies:\n");
-                                    for (index, dependency) in dp {
-                                        string.push_str(&format!(
-                                            "        {}. {}\n",
-                                            index + 1,
-                                            dependency.get_ref()
-                                        ));
-                                    }
-                                }
-                            }
-                            1 => {
-                                let dp = package.get_build_dependencies().iter().enumerate();
-                                if dp.len() != 0 {
-                                    string.push_str("      build dependencies:\n");
-                                    for (index, dependency) in dp {
-                                        string.push_str(&format!(
-                                            "        {}. {}\n",
-                                            index + 1,
-                                            dependency.get_ref()
-                                        ));
-                                    }
-                                }
-                            }
-                            2 => {
-                                let dp = package.get_test_dependencies().iter().enumerate();
-                                if dp.len() != 0 {
-                                    string.push_str("      test dependencies:\n");
-                                    for (index, dependency) in dp {
-                                        string.push_str(&format!(
-                                            "        {}. {}\n",
-                                            index + 1,
-                                            dependency.get_ref()
-                                        ));
-                                    }
-                                }
-                            }
-                            3 => {
-                                let dp = package.get_system_build_dependencies().iter().enumerate();
-                                if dp.len() != 0 {
-                                    string.push_str("      system build dependencies:\n");
-                                    for (index, dependency) in dp {
-                                        string.push_str(&format!(
-                                            "        {}. {}\n",
-                                            index + 1,
-                                            dependency.get_ref()
-                                        ));
-                                    }
-                                }
-                            }
-                            4 => {
-                                let dp = package.get_system_test_dependencies().iter().enumerate();
-                                if dp.len() != 0 {
-                                    string.push_str("      system test dependencies:\n");
-                                    for (index, dependency) in dp {
-                                        string.push_str(&format!(
-                                            "        {}. {}\n",
-                                            index + 1,
-                                            dependency.get_ref()
-                                        ));
-                                    }
-                                }
-                            }
-                            _ => panic!(),
-                        }
+
+                continue;
+            };
+
+            let component = self
+                .get_component_by_name(component_name)
+                .map_err(|e| format!("failed to get component: {}", e))?;
+
+            let mut component_mut = component.borrow_mut();
+
+            match dependency_type {
+                Build => component_mut.build.push(Rc::downgrade(rc_package)),
+                Test => component_mut.test.push(Rc::downgrade(rc_package)),
+                SystemBuild => component_mut.sys_build.push(Rc::downgrade(rc_package)),
+                SystemTest => component_mut.sys_test.push(Rc::downgrade(rc_package)),
+                Runtime => {
+                    return Err("can not insert runtime dependencies into component".to_owned())
+                }
+            }
+
+            rc_package
+                .borrow_mut()
+                .add_dependent(Rc::clone(component), dependency_type)
+                .map_err(|e| format!("failed to add dependent: {}", e))?;
+        }
+
+        Ok(())
+    }
+
+    pub fn set_package_obsolete(&mut self, fmri: FMRI) -> Result<(), String> {
+        let mut fmri_clone = fmri.clone();
+        let rc_package = self
+            .get_package_by_fmri(fmri_clone.remove_version())
+            .map_err(|e| format!("failed to get package: {}", e))?;
+
+        match fmri.get_version() {
+            None => rc_package.borrow_mut().set_obsolete(true),
+            Some(fmri_version) => {
+                for version in rc_package.borrow_mut().get_versions() {
+                    if version.version == fmri_version {
+                        version.set_obsolete(true);
                     }
                 }
             }
         }
 
-        write!(f, "{}", string)
+        Ok(())
+    }
+
+    pub fn set_package_renamed(&mut self, fmri: FMRI) -> Result<(), String> {
+        let mut fmri_clone = fmri.clone();
+        let rc_package = self
+            .get_package_by_fmri(fmri_clone.remove_version())
+            .map_err(|e| format!("failed to get package: {}", e))?;
+
+        match fmri.get_version() {
+            None => rc_package.borrow_mut().set_renamed(true),
+            Some(fmri_version) => {
+                for version in rc_package.borrow_mut().get_versions() {
+                    if version.version == fmri_version {
+                        version.set_renamed(true);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    // TODO: there might be something wrong here
+    pub fn distribute_reverse_runtime_dependencies(&mut self) {
+        let mut rev_run_deps: HashMap<FMRI, HashSet<RevDependType>> = HashMap::new();
+
+        let mut add = |fmri: FMRI, rev_depend_type: RevDependType| {
+            rev_run_deps
+                .entry(fmri)
+                .or_default()
+                .insert(rev_depend_type);
+        };
+
+        for p in &*self.packages {
+            let package = p.borrow();
+            for version in &package.versions {
+                for d in &version.runtime {
+                    match d.clone() {
+                        DependTypes::Require(f) => add(f, Require(package.fmri.clone())),
+                        DependTypes::Optional(f) => add(f, Optional(package.fmri.clone())),
+                        DependTypes::Incorporate(f) => add(f, Incorporate(package.fmri.clone())),
+                        DependTypes::RequireAny(l) => {
+                            for f in l.get() {
+                                add(f, Require(package.fmri.clone()))
+                            }
+                        }
+                        DependTypes::Conditional(f, p) => {
+                            add(f, ConditionalFmri(package.fmri.clone()));
+                            add(p, ConditionalPredicate(package.fmri.clone()));
+                        }
+                        DependTypes::Group(f) => add(f, Group(package.fmri.clone())),
+                        _ => unimplemented!(),
+                    };
+                }
+            }
+        }
+
+        for (fmri, hash_rev_deps) in rev_run_deps {
+            let mut rev_deps = hash_rev_deps
+                .iter()
+                .cloned()
+                .collect::<Vec<RevDependType>>();
+
+            match self.get_package_by_fmri(&fmri) {
+                Ok(package) => package
+                    .borrow_mut()
+                    .runtime_dependents
+                    .append(&mut rev_deps),
+                Err(_) => {
+                    for rev_dep in rev_deps {
+                        let (f, d_type) = match rev_dep {
+                            Require(f) => (f, DependTypes::Require(fmri.clone())),
+                            Optional(f) => (f, DependTypes::Optional(fmri.clone())),
+                            Incorporate(f) => (f, DependTypes::Incorporate(fmri.clone())),
+                            RequireAny(f) => (
+                                f,
+                                DependTypes::RequireAny(FMRIList::from(vec![fmri.clone()])),
+                            ),
+                            ConditionalFmri(f) => (
+                                f,
+                                DependTypes::Conditional(
+                                    fmri.clone(),
+                                    FMRI::parse_raw("none").unwrap(),
+                                ),
+                            ),
+                            ConditionalPredicate(f) => (
+                                f,
+                                DependTypes::Conditional(
+                                    FMRI::parse_raw("none").unwrap(),
+                                    fmri.clone(),
+                                ),
+                            ),
+                            Group(f) => (f, DependTypes::Group(fmri.clone())),
+                        };
+
+                        self.problems
+                            .add_problem(match self.get_package_by_fmri(&f) {
+                                Ok(p) => match p.borrow().is_renamed() {
+                                    true => NonExistingRequiredByRenamed(d_type, Runtime, f),
+                                    false => NonExistingRequired(d_type, Runtime, f, "".to_owned()),
+                                },
+                                Err(_) => {
+                                    panic!("non existing as required by non existing?")
+                                }
+                            });
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn remove_old_versions(&mut self) {
+        for p in &mut self.packages {
+            let mut package = p.borrow_mut();
+
+            package.versions.sort_by(|a, b| b.version.cmp(&a.version));
+
+            let mut new_ver = package.versions.first().unwrap().clone();
+
+            for ver in &package.versions {
+                if !ver.is_obsolete() && !ver.is_renamed() {
+                    new_ver = ver.clone();
+                    break;
+                }
+            }
+
+            package.change_versions(vec![new_ver]);
+        }
+    }
+
+    pub fn check_problems(&mut self) -> Result<(), String> {
+        // ObsoletedPackageInComponent and RenamedPackageInComponent
+        for c in &*self.components {
+            let component = c.borrow();
+            for p in &component.packages {
+                let t = p.upgrade().unwrap();
+                let package = t.borrow();
+                if package.is_obsolete() {
+                    self.problems.add_problem(ObsoletedPackageInComponent(
+                        package.fmri.clone(),
+                        component.name.clone(),
+                    ));
+                } else if package.is_renamed() {
+                    self.problems.add_problem(RenamedPackageInComponent(
+                        package.fmri.clone(),
+                        component.name.clone(),
+                    ));
+                }
+            }
+        }
+
+        // MissingComponentForPackage
+        for p in &*self.packages {
+            let package = p.borrow();
+
+            if package.is_in_component().is_none()
+                && !package.is_renamed()
+                && !package.is_obsolete()
+            {
+                self.problems
+                    .add_problem(MissingComponentForPackage(package.fmri.clone()));
+            }
+        }
+
+        // UselessComponent
+        for c in &*self.components {
+            let component = c.borrow();
+            if component.packages.iter().all(|p| {
+                let tmp = p.upgrade().unwrap();
+                let package = tmp.borrow();
+
+                if package.is_obsolete() || package.is_renamed() {
+                    return false;
+                }
+
+                for dep in &package.runtime_dependents {
+                    if let Incorporate(_) = dep {
+                    } else {
+                        return false;
+                    }
+                }
+
+                if package.build_dependents.is_empty()
+                    && package.test_dependents.is_empty()
+                    && package.sys_build_dependents.is_empty()
+                    && package.sys_build_dependents.is_empty()
+                {
+                    return true;
+                }
+
+                false
+            }) {
+                self.problems
+                    .add_problem(UselessComponent(component.get_name().clone()));
+            }
+        }
+
+        // RenamedNeedsRenamed
+        for p in &*self.packages {
+            let package = p.borrow();
+
+            if !package.is_renamed() {
+                continue;
+            }
+
+            for rev_dep in &package.runtime_dependents {
+                match rev_dep {
+                    Require(fmri)
+                    | Optional(fmri)
+                    | Incorporate(fmri)
+                    | RequireAny(fmri)
+                    | ConditionalFmri(fmri)
+                    | ConditionalPredicate(fmri)
+                    | Group(fmri) => {
+                        let package_b = self
+                            .get_package_by_fmri(fmri)
+                            .map_err(|e| format!("failed to get package: {}", e))?;
+                        if !package_b.borrow().is_renamed() {
+                            continue;
+                        }
+                        let fmri_b = package_b.borrow().fmri.clone();
+                        self.problems
+                            .add_problem(RenamedNeedsRenamed(fmri_b, package.fmri.clone()));
+                    }
+                }
+            }
+
+            match &package.component {
+                None => {}
+                Some(c) => {
+                    let component = c.borrow();
+
+                    let mut check_dependencies = |dependencies: &Vec<Weak<RefCell<Package>>>| {
+                        for dep in dependencies {
+                            let p = dep.upgrade().unwrap();
+                            let package_b = p.borrow();
+                            if package_b.is_renamed() {
+                                self.problems.add_problem(RenamedNeedsRenamed(
+                                    package.fmri.clone(),
+                                    package_b.fmri.clone(),
+                                ));
+                            }
+                        }
+                    };
+
+                    check_dependencies(&component.build);
+                    check_dependencies(&component.test);
+                    check_dependencies(&component.sys_build);
+                    check_dependencies(&component.sys_test);
+                }
+            }
+        }
+
+        // ObsoletedRequired, ObsoletedRequiredByRenamed, PartlyObsoletedRequired, PartlyObsoletedRequiredByRenamed
+        for p in &self.packages.clone() {
+            let package = p.borrow();
+
+            if !package.is_obsolete() {
+                continue;
+            }
+
+            if package.versions.first().unwrap().is_obsolete() {
+                check_obsoleted_required_packages(
+                    self,
+                    &package,
+                    ObsoletedRequired,
+                    ObsoletedRequiredByRenamed,
+                );
+            } else {
+                check_obsoleted_required_packages(
+                    self,
+                    &package,
+                    PartlyObsoletedRequired,
+                    PartlyObsoletedRequiredByRenamed,
+                );
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn check_obsoleted_required_packages(
+    components: &mut Components,
+    package: &Package,
+    problem_type: fn(DependTypes, DependencyTypes, FMRI, String) -> Problem,
+    problem_type_renamed: fn(DependTypes, DependencyTypes, FMRI) -> Problem,
+) {
+    let mut check = |deps: &Vec<Rc<RefCell<Component>>>, dt: DependencyTypes| {
+        for c in deps {
+            components.problems.add_problem(problem_type(
+                DependTypes::Require(package.fmri.clone()),
+                dt.clone(),
+                FMRI::parse_raw("none").unwrap(),
+                c.borrow().name.clone(),
+            ));
+        }
+    };
+
+    check(&package.build_dependents, Build);
+    check(&package.sys_build_dependents, SystemBuild);
+    check(&package.test_dependents, Test);
+    check(&package.sys_test_dependents, SystemTest);
+
+    for d in &package.runtime_dependents {
+        let required_by_fmri = match d {
+            Require(fmri)
+            | Optional(fmri)
+            | RequireAny(fmri)
+            | ConditionalFmri(fmri)
+            | ConditionalPredicate(fmri)
+            | Group(fmri) => fmri.clone(),
+            Incorporate(_) => continue,
+        };
+
+        let p = components
+            .get_package_by_fmri(&required_by_fmri)
+            .unwrap()
+            .borrow();
+        let o = p.is_obsolete();
+        let r = p.is_renamed();
+        drop(p);
+
+        if o {
+            continue;
+        } else if r {
+            components.problems.add_problem(problem_type_renamed(
+                DependTypes::Require(package.fmri.clone()),
+                Runtime,
+                required_by_fmri,
+            ));
+        } else {
+            components.problems.add_problem(problem_type(
+                DependTypes::Require(package.fmri.clone()),
+                Runtime,
+                required_by_fmri,
+                "".to_owned(),
+            ));
+        }
+    }
+}
+
+/// Component contains name, list of packages in component and dependencies.
+#[derive(Clone, Debug)]
+pub struct Component {
+    pub(crate) name: String,
+    /// contains no version
+    pub(crate) packages: Vec<Weak<RefCell<Package>>>,
+    /// dependencies
+    pub(crate) build: Vec<Weak<RefCell<Package>>>,
+    pub(crate) test: Vec<Weak<RefCell<Package>>>,
+    pub(crate) sys_build: Vec<Weak<RefCell<Package>>>,
+    pub(crate) sys_test: Vec<Weak<RefCell<Package>>>,
+}
+
+impl Component {
+    pub fn new(component_name: String) -> Self {
+        Self {
+            name: component_name,
+            packages: Vec::new(),
+            build: Vec::new(),
+            test: Vec::new(),
+            sys_build: Vec::new(),
+            sys_test: Vec::new(),
+        }
+    }
+
+    fn add_package(&mut self, package: Weak<RefCell<Package>>) {
+        self.packages.push(package)
+    }
+
+    pub fn get_name(&self) -> &String {
+        &self.name
     }
 }

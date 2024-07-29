@@ -1,10 +1,5 @@
-use std::{
-    fs::File,
-    io::{Read, Write},
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
-use bincode::{deserialize, serialize};
 use fmri::FMRI;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -20,7 +15,7 @@ use crate::{
     },
 };
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub enum Problem {
     MissingComponentForPackage(FMRI),
     RenamedNeedsRenamed(FMRI, FMRI),
@@ -38,7 +33,7 @@ pub enum Problem {
     NonExistingPackageInPkg5(FMRI, String),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Problems(Vec<Problem>);
 
 impl Problems {
@@ -53,6 +48,7 @@ impl Problems {
     pub fn add_problem(&mut self, mut problem: Problem) {
         match &mut problem {
             MissingComponentForPackage(fmri) => {
+                fmri.remove_publisher();
                 fmri.remove_version();
             }
             RenamedNeedsRenamed(fmri_a, fmri_b) => {
@@ -150,30 +146,6 @@ impl Problems {
         };
 
         self.0.contains(problem)
-    }
-
-    pub fn serialize<P: AsRef<Path> + ?Sized + std::fmt::Display>(
-        &self,
-        path: &P,
-    ) -> Result<(), String> {
-        File::create(path)
-            .unwrap()
-            .write_all(&serialize(self).map_err(|e| {
-                format!("failed to serialize file with problems into binary: {}", e)
-            })?)
-            .map_err(|e| format!("failed to write problems to {}: {}", path, e))?;
-        Ok(())
-    }
-
-    pub fn deserialize<P: AsRef<Path> + ?Sized + std::fmt::Display>(
-        path: &P,
-    ) -> Result<Self, String> {
-        let data = &mut Vec::new();
-        File::open(path)
-            .map_err(|e| format!("failed to open file with problems: {}", e))?
-            .read_to_end(data)
-            .map_err(|e| format!("failed to read problems: {}", e))?;
-        deserialize(data).map_err(|e| format!("failed to deserialize data from {}: {}", path, e))
     }
 
     fn sort(&mut self) {
@@ -313,7 +285,6 @@ pub fn report(problems: &mut Problems) {
                         DependencyTypes::SystemTest => {
                             format!("{} (test, system)", package_or_component_name)
                         }
-                        DependencyTypes::None => panic!("DependencyTypes can't be None"),
                     }
                 )
             }
@@ -341,7 +312,6 @@ pub fn report(problems: &mut Problems) {
                         DependencyTypes::SystemTest => {
                             format!("{} (system-test)", package_name)
                         }
-                        DependencyTypes::None => panic!("DependencyTypes can't be None"),
                     }
                 )
             }
@@ -374,7 +344,6 @@ pub fn report(problems: &mut Problems) {
                         DependencyTypes::SystemTest => {
                             format!("{} (test, system)", package_or_component_name)
                         }
-                        DependencyTypes::None => panic!("DependencyTypes can't be None"),
                     }
                 );
             }
@@ -403,7 +372,6 @@ pub fn report(problems: &mut Problems) {
                         DependencyTypes::SystemTest => {
                             format!("{} (system-test, system)", package_name)
                         }
-                        DependencyTypes::None => panic!("DependencyTypes can't be None"),
                     }
                 );
             }
@@ -436,7 +404,6 @@ pub fn report(problems: &mut Problems) {
                         DependencyTypes::SystemTest => {
                             format!("{} (test, system)", package_or_component_name)
                         }
-                        DependencyTypes::None => panic!("DependencyTypes can't be None"),
                     }
                 );
             }
@@ -464,7 +431,6 @@ pub fn report(problems: &mut Problems) {
                         DependencyTypes::SystemTest => {
                             format!("{} (system-test, system)", package_name)
                         }
-                        DependencyTypes::None => panic!("DependencyTypes can't be None"),
                     }
                 );
             }

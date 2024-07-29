@@ -1,97 +1,119 @@
-use std::cmp::Ordering;
-
-use fmri::FMRI;
+use crate::{
+    packages::{
+        dependency_type::{
+            DependencyTypes,
+            DependencyTypes::{Build, Runtime, SystemBuild, SystemTest, Test},
+        },
+        rev_depend_type::RevDependType,
+    },
+    problems::{Problem, Problem::PackageInMultipleComponents},
+    Component, DependTypes,
+};
+use fmri::{Version, FMRI};
 use serde::{Deserialize, Serialize};
+use std::{cell::RefCell, cmp::Ordering, rc::Rc};
 
-use crate::packages::{components::Components, dependencies::Dependencies, dependency::Dependency};
-
-/// Package contains dependencies
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+/// Package. Can hold multiple versions with different runtime dependencies.
+#[derive(Clone, Debug)]
 pub struct Package {
-    fmri: FMRI,
-    obsolete: bool,
-    renamed: bool,
-    runtime: Dependencies,
-    build: Dependencies,
-    test: Dependencies,
-    system_build: Dependencies,
-    system_test: Dependencies,
+    /// contains no version
+    pub(crate) fmri: FMRI,
+    /// versions of package
+    pub(crate) versions: Vec<PackageVersion>,
+    /// reference to component, if package is in component
+    pub(crate) component: Option<Rc<RefCell<Component>>>,
+    pub(crate) obsolete: bool,
+    pub(crate) renamed: bool,
+    /// packages that depend on this package
+    pub(crate) runtime_dependents: Vec<RevDependType>,
+    pub(crate) build_dependents: Vec<Rc<RefCell<Component>>>,
+    pub(crate) test_dependents: Vec<Rc<RefCell<Component>>>,
+    pub(crate) sys_build_dependents: Vec<Rc<RefCell<Component>>>,
+    pub(crate) sys_test_dependents: Vec<Rc<RefCell<Component>>>,
 }
 
 impl Package {
-    pub fn new(package_fmri: FMRI, obsolete: bool, renamed: bool) -> Self {
+    /// for creating new empty package
+    pub fn new(fmri: FMRI) -> Self {
         Self {
-            fmri: package_fmri,
-            obsolete,
-            renamed,
-            runtime: Dependencies::new(),
-            build: Dependencies::new(),
-            test: Dependencies::new(),
-            system_build: Dependencies::new(),
-            system_test: Dependencies::new(),
+            fmri,
+            versions: Vec::new(),
+            component: None,
+            runtime_dependents: Vec::new(),
+            obsolete: false,
+            renamed: false,
+            build_dependents: Vec::new(),
+            test_dependents: Vec::new(),
+            sys_build_dependents: Vec::new(),
+            sys_test_dependents: Vec::new(),
         }
     }
 
-    pub fn fmri_ref(&self) -> &FMRI {
-        &self.fmri
-    }
-
-    pub fn fmri(self) -> FMRI {
-        self.fmri
-    }
-
-    pub fn is_fmri_needed_as_dependency(
-        &self,
-        components: &Components,
-        fmri: &FMRI,
-    ) -> Option<Vec<(FMRI, String, Dependency)>> {
-        // TODO: what to do if a package is dependent on itself?
-
-        let mut required_dependencies: Vec<(FMRI, String, Dependency)> = Vec::new();
-
-        if let Some(dependency) = self
-            .get_runtime_dependencies_as_struct()
-            .is_fmri_needed_as_dependency(components, fmri)
-        {
-            required_dependencies.push((self.clone().fmri(), "RUNTIME".to_owned(), dependency));
+    pub fn add_package_version(&mut self, package_version: PackageVersion) -> Result<(), String> {
+        if self.versions.contains(&package_version) {
+            return Ok(());
         }
 
-        if let Some(dependency) = self
-            .get_build_dependencies_as_struct()
-            .is_fmri_needed_as_dependency(components, fmri)
-        {
-            required_dependencies.push((self.clone().fmri(), "BUILD".to_owned(), dependency));
+        for ver in &self.versions {
+            if ver.version.cmp(&package_version.version) == Ordering::Equal {
+                return Ok(());
+            }
         }
 
-        if let Some(dependency) = self
-            .get_test_dependencies_as_struct()
-            .is_fmri_needed_as_dependency(components, fmri)
-        {
-            required_dependencies.push((self.clone().fmri(), "TEST".to_owned(), dependency));
-        }
-
-        if let Some(dependency) = self
-            .get_system_build_dependencies_as_struct()
-            .is_fmri_needed_as_dependency(components, fmri)
-        {
-            required_dependencies.push((
-                self.clone().fmri(),
-                "SYSTEM-BUILD".to_owned(),
-                dependency,
+        if package_version.is_obsolete() && package_version.is_renamed() {
+            return Err(format!(
+                "package cannot be obsolete and renamed at the same time, package: {:?}",
+                package_version
             ));
         }
 
-        if let Some(dependency) = self
-            .get_system_test_dependencies_as_struct()
-            .is_fmri_needed_as_dependency(components, fmri)
-        {
-            required_dependencies.push((self.clone().fmri(), "SYSTEM-TEST".to_owned(), dependency));
-        }
+        self.set_obsolete(package_version.is_obsolete());
+        self.set_renamed(package_version.is_renamed());
 
-        if required_dependencies.is_empty() {
-            return None;
+        self.versions.push(package_version);
+        Ok(())
+    }
+
+    pub fn add_dependent(
+        &mut self,
+        dependent: Rc<RefCell<Component>>,
+        dependency_type: &DependencyTypes,
+    ) -> Result<(), String> {
+        match dependency_type {
+            Runtime => return Err("you can not add runtime dependent".to_owned()),
+            Build => self.build_dependents.push(dependent),
+            Test => self.test_dependents.push(dependent),
+            SystemBuild => self.sys_build_dependents.push(dependent),
+            SystemTest => self.sys_test_dependents.push(dependent),
         }
-        Some(required_dependencies)
+        Ok(())
+    }
+
+    pub fn set_component(&mut self, component: Rc<RefCell<Component>>) -> Option<Box<Problem>> {
+        if let Some(c) = &self.component {
+            return Some(Box::new(PackageInMultipleComponents(
+                self.fmri.clone(),
+                vec![
+                    c.borrow().get_name().to_owned(),
+                    component.borrow().get_name().to_owned(),
+                ],
+            )));
+        } else {
+            self.component = Some(component)
+        }
+        None
+    }
+
+    pub fn get_versions(&mut self) -> &mut Vec<PackageVersion> {
+        &mut self.versions
+    }
+
+    pub fn set_obsolete(&mut self, obsolete: bool) {
+        self.obsolete = obsolete
+    }
+
+    pub fn set_renamed(&mut self, renamed: bool) {
+        self.renamed = renamed
     }
 
     pub fn is_obsolete(&self) -> bool {
@@ -102,76 +124,75 @@ impl Package {
         self.renamed
     }
 
-    pub fn get_runtime_dependencies_as_struct(&self) -> &Dependencies {
-        &self.runtime
+    pub fn is_in_component(&self) -> &Option<Rc<RefCell<Component>>> {
+        &self.component
     }
 
-    pub fn get_build_dependencies_as_struct(&self) -> &Dependencies {
-        &self.build
+    pub fn get_runtime_dependents(&self) -> &Vec<RevDependType> {
+        &self.runtime_dependents
     }
 
-    pub fn get_test_dependencies_as_struct(&self) -> &Dependencies {
-        &self.test
+    pub fn get_git_dependents(
+        &self,
+        dependency_type: DependencyTypes,
+    ) -> Result<&Vec<Rc<RefCell<Component>>>, String> {
+        Ok(match dependency_type {
+            Runtime => return Err("you can not add runtime dependent".to_owned()),
+            Build => &self.build_dependents,
+            Test => &self.test_dependents,
+            SystemBuild => &self.sys_build_dependents,
+            SystemTest => &self.sys_test_dependents,
+        })
     }
 
-    pub fn get_system_build_dependencies_as_struct(&self) -> &Dependencies {
-        &self.system_build
-    }
-
-    pub fn get_system_test_dependencies_as_struct(&self) -> &Dependencies {
-        &self.system_test
-    }
-
-    pub fn get_runtime_dependencies(&self) -> &Vec<Dependency> {
-        self.runtime.get_ref()
-    }
-
-    pub fn get_build_dependencies(&self) -> &Vec<Dependency> {
-        self.build.get_ref()
-    }
-
-    pub fn get_test_dependencies(&self) -> &Vec<Dependency> {
-        self.test.get_ref()
-    }
-
-    pub fn get_system_build_dependencies(&self) -> &Vec<Dependency> {
-        self.system_build.get_ref()
-    }
-
-    pub fn get_system_test_dependencies(&self) -> &Vec<Dependency> {
-        self.system_test.get_ref()
-    }
-
-    pub fn add_runtime_dependencies(&mut self, dependencies: Dependencies) {
-        self.runtime += dependencies
-    }
-
-    pub fn add_build_dependencies(&mut self, dependencies: Dependencies) {
-        self.build += dependencies
-    }
-
-    pub fn add_test_dependencies(&mut self, dependencies: Dependencies) {
-        self.test += dependencies
-    }
-
-    pub fn add_system_build_dependencies(&mut self, dependencies: Dependencies) {
-        self.system_build += dependencies
-    }
-
-    pub fn add_system_test_dependencies(&mut self, dependencies: Dependencies) {
-        self.system_test += dependencies
+    pub fn change_versions(&mut self, vers: Vec<PackageVersion>) {
+        self.versions = vers
     }
 }
 
-impl PartialOrd<Self> for Package {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
+/// PackageVersion represents one version of package
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct PackageVersion {
+    /// package version
+    pub(crate) version: Version,
+    /// runtime dependencies
+    pub(crate) runtime: Vec<DependTypes>,
+    obsolete: bool,
+    renamed: bool,
 }
 
-impl Ord for Package {
-    /// Compares versions of FMRI
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.fmri.cmp(&other.fmri)
+impl PackageVersion {
+    /// for creating new empty version of package
+    pub fn new(version: Version) -> Self {
+        Self {
+            version,
+            runtime: vec![],
+            obsolete: false,
+            renamed: false,
+        }
+    }
+
+    /// `package` argument points to the pacakge where this `package version` belongs
+    pub fn add_runtime_dependencies(&mut self, runtime: &mut Vec<DependTypes>) -> &Self {
+        self.runtime.append(runtime);
+        self
+    }
+
+    pub fn set_obsolete(&mut self, obsolete: bool) -> &Self {
+        self.obsolete = obsolete;
+        self
+    }
+
+    pub fn set_renamed(&mut self, renamed: bool) -> &Self {
+        self.renamed = renamed;
+        self
+    }
+
+    pub fn is_obsolete(&self) -> bool {
+        self.obsolete
+    }
+
+    pub fn is_renamed(&self) -> bool {
+        self.renamed
     }
 }

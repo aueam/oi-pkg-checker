@@ -1,3 +1,1 @@
-mod dependencies_test;
-mod package_test;
-mod package_versions_test;
+mod de_serialization_test;

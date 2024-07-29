@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use fmri::{FMRI, fmri_list::FMRIList};
+use fmri::{fmri_list::FMRIList, FMRI};
 use serde::{Deserialize, Serialize};
 
 /// Represents depend action type
@@ -41,7 +41,6 @@ impl DependTypes {
                 ("require-any".to_owned(), string)
             }
             DependTypes::Conditional(fmri, predicate) => {
-                // TODO: remove this
                 if fmri.package_name_eq(&FMRI::parse_raw("none").unwrap()) {
                     return ("conditional".to_owned(), format!("predicate={}", predicate));
                 }
