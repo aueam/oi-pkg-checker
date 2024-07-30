@@ -1,17 +1,19 @@
+use std::{cell::RefCell, cmp::Ordering, rc::Rc};
+
+use fmri::{FMRI, Version};
+use serde::{Deserialize, Serialize};
+
 use crate::{
+    Component,
+    DependTypes,
     packages::{
         dependency_type::{
             DependencyTypes,
             DependencyTypes::{Build, Runtime, SystemBuild, SystemTest, Test},
         },
         rev_depend_type::RevDependType,
-    },
-    problems::{Problem, Problem::PackageInMultipleComponents},
-    Component, DependTypes,
+    }, problems::{Problem, Problem::PackageInMultipleComponents},
 };
-use fmri::{Version, FMRI};
-use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, cmp::Ordering, rc::Rc};
 
 /// Package. Can hold multiple versions with different runtime dependencies.
 #[derive(Clone, Debug)]
@@ -104,7 +106,11 @@ impl Package {
         None
     }
 
-    pub fn get_versions(&mut self) -> &mut Vec<PackageVersion> {
+    pub fn get_versions(&self) -> &Vec<PackageVersion> {
+        &self.versions
+    }
+
+    pub fn get_versions_mut(&mut self) -> &mut Vec<PackageVersion> {
         &mut self.versions
     }
 
@@ -172,10 +178,13 @@ impl PackageVersion {
         }
     }
 
-    /// `package` argument points to the pacakge where this `package version` belongs
     pub fn add_runtime_dependencies(&mut self, runtime: &mut Vec<DependTypes>) -> &Self {
         self.runtime.append(runtime);
         self
+    }
+
+    pub fn get_runtime_dependencies(&self) -> &Vec<DependTypes> {
+        &self.runtime
     }
 
     pub fn set_obsolete(&mut self, obsolete: bool) -> &Self {

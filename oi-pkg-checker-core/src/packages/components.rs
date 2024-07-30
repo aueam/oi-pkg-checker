@@ -1,12 +1,14 @@
-use crate::packages::{
-    dependency_type::{
-        DependencyTypes,
-        DependencyTypes::{Build, Runtime, SystemBuild, SystemTest, Test},
-    },
-    package::Package,
-    rev_depend_type::{RevDependType, RevDependType::*},
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    rc::{Rc, Weak},
 };
+
+use fmri::{FMRI, FMRIList};
+
 use crate::{
+    DependTypes,
     problems::{
         Problem,
         Problem::{
@@ -15,15 +17,15 @@ use crate::{
             ObsoletedRequiredByRenamed, PartlyObsoletedRequired, PartlyObsoletedRequiredByRenamed,
             RenamedNeedsRenamed, RenamedPackageInComponent, UselessComponent,
         },
-    },
-    DependTypes, Problems,
+    }, Problems,
 };
-use fmri::{FMRIList, FMRI};
-use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
-    fmt::Debug,
-    rc::{Rc, Weak},
+use crate::packages::{
+    dependency_type::{
+        DependencyTypes,
+        DependencyTypes::{Build, Runtime, SystemBuild, SystemTest, Test},
+    },
+    package::Package,
+    rev_depend_type::{RevDependType, RevDependType::*},
 };
 
 #[derive(Default, Clone, Debug)]
@@ -109,6 +111,10 @@ impl Components {
         &self.components
     }
 
+    pub fn get_packages(&self) -> &Vec<Rc<RefCell<Package>>> {
+        &self.packages
+    }
+
     /// adds repo dependencies (Build, Test, System Build and System Test) into component
     pub fn add_repo_dependencies(
         &mut self,
@@ -164,7 +170,7 @@ impl Components {
         match fmri.get_version() {
             None => rc_package.borrow_mut().set_obsolete(true),
             Some(fmri_version) => {
-                for version in rc_package.borrow_mut().get_versions() {
+                for version in rc_package.borrow_mut().get_versions_mut() {
                     if version.version == fmri_version {
                         version.set_obsolete(true);
                     }
@@ -184,7 +190,7 @@ impl Components {
         match fmri.get_version() {
             None => rc_package.borrow_mut().set_renamed(true),
             Some(fmri_version) => {
-                for version in rc_package.borrow_mut().get_versions() {
+                for version in rc_package.borrow_mut().get_versions_mut() {
                     if version.version == fmri_version {
                         version.set_renamed(true);
                     }
