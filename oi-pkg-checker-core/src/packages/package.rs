@@ -1,18 +1,19 @@
-use std::{cell::RefCell, cmp::Ordering, rc::Rc};
+use std::cmp::Ordering;
 
-use fmri::{FMRI, Version};
+use fmri::{Version, FMRI};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Component,
-    DependTypes,
+    get,
     packages::{
         dependency_type::{
             DependencyTypes,
             DependencyTypes::{Build, Runtime, SystemBuild, SystemTest, Test},
         },
         rev_depend_type::RevDependType,
-    }, problems::{Problem, Problem::PackageInMultipleComponents},
+    },
+    problems::{Problem, Problem::PackageInMultipleComponents},
+    shared_type, Component, DependTypes,
 };
 
 /// Package. Can hold multiple versions with different runtime dependencies.
@@ -23,15 +24,15 @@ pub struct Package {
     /// versions of package
     pub(crate) versions: Vec<PackageVersion>,
     /// reference to component, if package is in component
-    pub(crate) component: Option<Rc<RefCell<Component>>>,
+    pub(crate) component: Option<shared_type!(Component)>,
     pub(crate) obsolete: bool,
     pub(crate) renamed: bool,
     /// packages that depend on this package
     pub(crate) runtime_dependents: Vec<RevDependType>,
-    pub(crate) build_dependents: Vec<Rc<RefCell<Component>>>,
-    pub(crate) test_dependents: Vec<Rc<RefCell<Component>>>,
-    pub(crate) sys_build_dependents: Vec<Rc<RefCell<Component>>>,
-    pub(crate) sys_test_dependents: Vec<Rc<RefCell<Component>>>,
+    pub(crate) build_dependents: Vec<shared_type!(Component)>,
+    pub(crate) test_dependents: Vec<shared_type!(Component)>,
+    pub(crate) sys_build_dependents: Vec<shared_type!(Component)>,
+    pub(crate) sys_test_dependents: Vec<shared_type!(Component)>,
 }
 
 impl Package {
@@ -78,7 +79,7 @@ impl Package {
 
     pub fn add_dependent(
         &mut self,
-        dependent: Rc<RefCell<Component>>,
+        dependent: shared_type!(Component),
         dependency_type: &DependencyTypes,
     ) -> Result<(), String> {
         match dependency_type {
@@ -91,13 +92,13 @@ impl Package {
         Ok(())
     }
 
-    pub fn set_component(&mut self, component: Rc<RefCell<Component>>) -> Option<Box<Problem>> {
+    pub fn set_component(&mut self, component: shared_type!(Component)) -> Option<Box<Problem>> {
         if let Some(c) = &self.component {
             return Some(Box::new(PackageInMultipleComponents(
                 self.fmri.clone(),
                 vec![
-                    c.borrow().get_name().to_owned(),
-                    component.borrow().get_name().to_owned(),
+                    get!(c).get_name().to_owned(),
+                    get!(component).get_name().to_owned(),
                 ],
             )));
         } else {
@@ -130,7 +131,7 @@ impl Package {
         self.renamed
     }
 
-    pub fn is_in_component(&self) -> &Option<Rc<RefCell<Component>>> {
+    pub fn is_in_component(&self) -> &Option<shared_type!(Component)> {
         &self.component
     }
 
@@ -141,7 +142,7 @@ impl Package {
     pub fn get_git_dependents(
         &self,
         dependency_type: DependencyTypes,
-    ) -> Result<&Vec<Rc<RefCell<Component>>>, String> {
+    ) -> Result<&Vec<shared_type!(Component)>, String> {
         Ok(match dependency_type {
             Runtime => return Err("you can not add runtime dependent".to_owned()),
             Build => &self.build_dependents,

@@ -1,14 +1,21 @@
 use std::{
-    cell::RefCell,
     collections::{HashMap, HashSet},
     fmt::Debug,
-    rc::{Rc, Weak},
 };
 
 use fmri::{FMRI, FMRIList};
 
 use crate::{
-    DependTypes,
+    clone, DependTypes, downgrade, get, get_mut,
+    new,
+    packages::{
+        dependency_type::{
+            DependencyTypes,
+            DependencyTypes::{Build, Runtime, SystemBuild, SystemTest, Test},
+        },
+        package::Package,
+        rev_depend_type::{RevDependType, RevDependType::*},
+    },
     problems::{
         Problem,
         Problem::{
@@ -17,25 +24,17 @@ use crate::{
             ObsoletedRequiredByRenamed, PartlyObsoletedRequired, PartlyObsoletedRequiredByRenamed,
             RenamedNeedsRenamed, RenamedPackageInComponent, UselessComponent,
         },
-    }, Problems,
-};
-use crate::packages::{
-    dependency_type::{
-        DependencyTypes,
-        DependencyTypes::{Build, Runtime, SystemBuild, SystemTest, Test},
-    },
-    package::Package,
-    rev_depend_type::{RevDependType, RevDependType::*},
+    }, Problems, shared_type, weak_type,
 };
 
 #[derive(Default, Clone, Debug)]
 pub struct Components {
     /// components in system
-    pub(crate) components: Vec<Rc<RefCell<Component>>>,
-    pub(crate) hash_components: HashMap<String, Rc<RefCell<Component>>>,
+    pub(crate) components: Vec<shared_type!(Component)>,
+    pub(crate) hash_components: HashMap<String, shared_type!(Component)>,
     /// packages in system
-    pub(crate) packages: Vec<Rc<RefCell<Package>>>,
-    pub(crate) hash_packages: HashMap<String, Rc<RefCell<Package>>>,
+    pub(crate) packages: Vec<shared_type!(Package)>,
+    pub(crate) hash_packages: HashMap<String, shared_type!(Package)>,
     pub problems: Problems,
 }
 
@@ -49,9 +48,8 @@ impl Components {
 
         // TODO: set package obsolete?
 
-        let rc_package = Rc::new(RefCell::new(package));
-
-        self.packages.push(Rc::clone(&rc_package));
+        let rc_package = new!(package);
+        self.packages.push(clone!(&rc_package));
         self.hash_packages.insert(package_name, rc_package);
     }
 
@@ -60,18 +58,13 @@ impl Components {
         component_name: String,
         packages: Vec<FMRI>,
     ) -> Result<(), String> {
-        let rc_component = Rc::new(RefCell::new(Component::new(component_name.clone())));
+        let rc_component = new!(Component::new(component_name.clone()));
 
         for fmri in packages {
             let res = match self.get_package_by_fmri(&fmri) {
                 Ok(rc_package) => {
-                    rc_component
-                        .borrow_mut()
-                        .add_package(Rc::downgrade(rc_package));
-
-                    rc_package
-                        .borrow_mut()
-                        .set_component(Rc::clone(&rc_component))
+                    get_mut!(rc_component).add_package(downgrade!(rc_package));
+                    get_mut!(rc_package).set_component(clone!(&rc_component))
                 }
                 Err(_) => Some(Box::new(NonExistingPackageInPkg5(
                     fmri,
@@ -84,20 +77,20 @@ impl Components {
             }
         }
 
-        self.components.push(Rc::clone(&rc_component));
+        self.components.push(clone!(&rc_component));
         self.hash_components.insert(component_name, rc_component);
 
         Ok(())
     }
 
-    pub fn get_component_by_name(&self, name: &String) -> Result<&Rc<RefCell<Component>>, String> {
+    pub fn get_component_by_name(&self, name: &String) -> Result<&shared_type!(Component), String> {
         return match self.hash_components.get(name) {
             None => Err(format!("component {} does not exist", name)),
             Some(component) => Ok(component),
         };
     }
 
-    pub fn get_package_by_fmri(&self, fmri: &FMRI) -> Result<&Rc<RefCell<Package>>, String> {
+    pub fn get_package_by_fmri(&self, fmri: &FMRI) -> Result<&shared_type!(Package), String> {
         return match self
             .hash_packages
             .get(fmri.get_package_name_as_ref_string())
@@ -107,11 +100,11 @@ impl Components {
         };
     }
 
-    pub fn get_components(&self) -> &Vec<Rc<RefCell<Component>>> {
+    pub fn get_components(&self) -> &Vec<shared_type!(Component)> {
         &self.components
     }
 
-    pub fn get_packages(&self) -> &Vec<Rc<RefCell<Package>>> {
+    pub fn get_packages(&self) -> &Vec<shared_type!(Package)> {
         &self.packages
     }
 
@@ -140,21 +133,20 @@ impl Components {
                 .get_component_by_name(component_name)
                 .map_err(|e| format!("failed to get component: {}", e))?;
 
-            let mut component_mut = component.borrow_mut();
+            let mut component_mut = get_mut!(component);
 
             match dependency_type {
-                Build => component_mut.build.push(Rc::downgrade(rc_package)),
-                Test => component_mut.test.push(Rc::downgrade(rc_package)),
-                SystemBuild => component_mut.sys_build.push(Rc::downgrade(rc_package)),
-                SystemTest => component_mut.sys_test.push(Rc::downgrade(rc_package)),
+                Build => component_mut.build.push(downgrade!(rc_package)),
+                Test => component_mut.test.push(downgrade!(rc_package)),
+                SystemBuild => component_mut.sys_build.push(downgrade!(rc_package)),
+                SystemTest => component_mut.sys_test.push(downgrade!(rc_package)),
                 Runtime => {
                     return Err("can not insert runtime dependencies into component".to_owned())
                 }
             }
 
-            rc_package
-                .borrow_mut()
-                .add_dependent(Rc::clone(component), dependency_type)
+            get_mut!(rc_package)
+                .add_dependent(clone!(component), dependency_type)
                 .map_err(|e| format!("failed to add dependent: {}", e))?;
         }
 
@@ -168,9 +160,9 @@ impl Components {
             .map_err(|e| format!("failed to get package: {}", e))?;
 
         match fmri.get_version() {
-            None => rc_package.borrow_mut().set_obsolete(true),
+            None => get_mut!(rc_package).set_obsolete(true),
             Some(fmri_version) => {
-                for version in rc_package.borrow_mut().get_versions_mut() {
+                for version in get_mut!(rc_package).get_versions_mut() {
                     if version.version == fmri_version {
                         version.set_obsolete(true);
                     }
@@ -188,9 +180,9 @@ impl Components {
             .map_err(|e| format!("failed to get package: {}", e))?;
 
         match fmri.get_version() {
-            None => rc_package.borrow_mut().set_renamed(true),
+            None => get_mut!(rc_package).set_renamed(true),
             Some(fmri_version) => {
-                for version in rc_package.borrow_mut().get_versions_mut() {
+                for version in get_mut!(rc_package).get_versions_mut() {
                     if version.version == fmri_version {
                         version.set_renamed(true);
                     }
@@ -213,7 +205,7 @@ impl Components {
         };
 
         for p in &*self.packages {
-            let package = p.borrow();
+            let package = get!(p);
             for version in &package.versions {
                 for d in &version.runtime {
                     match d.clone() {
@@ -243,10 +235,7 @@ impl Components {
                 .collect::<Vec<RevDependType>>();
 
             match self.get_package_by_fmri(&fmri) {
-                Ok(package) => package
-                    .borrow_mut()
-                    .runtime_dependents
-                    .append(&mut rev_deps),
+                Ok(package) => get_mut!(package).runtime_dependents.append(&mut rev_deps),
                 Err(_) => {
                     for rev_dep in rev_deps {
                         let (f, d_type) = match rev_dep {
@@ -276,7 +265,7 @@ impl Components {
 
                         self.problems
                             .add_problem(match self.get_package_by_fmri(&f) {
-                                Ok(p) => match p.borrow().is_renamed() {
+                                Ok(p) => match get!(p).is_renamed() {
                                     true => NonExistingRequiredByRenamed(d_type, Runtime, f),
                                     false => NonExistingRequired(d_type, Runtime, f, "".to_owned()),
                                 },
@@ -292,7 +281,7 @@ impl Components {
 
     pub fn remove_old_versions(&mut self) {
         for p in &mut self.packages {
-            let mut package = p.borrow_mut();
+            let mut package = get_mut!(p);
 
             package.versions.sort_by(|a, b| b.version.cmp(&a.version));
 
@@ -312,10 +301,10 @@ impl Components {
     pub fn check_problems(&mut self) -> Result<(), String> {
         // ObsoletedPackageInComponent and RenamedPackageInComponent
         for c in &*self.components {
-            let component = c.borrow();
+            let component = get!(c);
             for p in &component.packages {
                 let t = p.upgrade().unwrap();
-                let package = t.borrow();
+                let package = get!(t);
                 if package.is_obsolete() {
                     self.problems.add_problem(ObsoletedPackageInComponent(
                         package.fmri.clone(),
@@ -332,7 +321,7 @@ impl Components {
 
         // MissingComponentForPackage
         for p in &*self.packages {
-            let package = p.borrow();
+            let package = get!(p);
 
             if package.is_in_component().is_none()
                 && !package.is_renamed()
@@ -345,10 +334,10 @@ impl Components {
 
         // UselessComponent
         for c in &*self.components {
-            let component = c.borrow();
+            let component = get!(c);
             if component.packages.iter().all(|p| {
                 let tmp = p.upgrade().unwrap();
-                let package = tmp.borrow();
+                let package = get!(tmp);
 
                 if package.is_obsolete() || package.is_renamed() {
                     return false;
@@ -378,7 +367,7 @@ impl Components {
 
         // RenamedNeedsRenamed
         for p in &*self.packages {
-            let package = p.borrow();
+            let package = get!(p);
 
             if !package.is_renamed() {
                 continue;
@@ -396,10 +385,10 @@ impl Components {
                         let package_b = self
                             .get_package_by_fmri(fmri)
                             .map_err(|e| format!("failed to get package: {}", e))?;
-                        if !package_b.borrow().is_renamed() {
+                        if !get!(package_b).is_renamed() {
                             continue;
                         }
-                        let fmri_b = package_b.borrow().fmri.clone();
+                        let fmri_b = get!(package_b).fmri.clone();
                         self.problems
                             .add_problem(RenamedNeedsRenamed(fmri_b, package.fmri.clone()));
                     }
@@ -409,12 +398,12 @@ impl Components {
             match &package.component {
                 None => {}
                 Some(c) => {
-                    let component = c.borrow();
+                    let component = get!(c);
 
-                    let mut check_dependencies = |dependencies: &Vec<Weak<RefCell<Package>>>| {
+                    let mut check_dependencies = |dependencies: &Vec<weak_type!(Package)>| {
                         for dep in dependencies {
                             let p = dep.upgrade().unwrap();
-                            let package_b = p.borrow();
+                            let package_b = get!(p);
                             if package_b.is_renamed() {
                                 self.problems.add_problem(RenamedNeedsRenamed(
                                     package.fmri.clone(),
@@ -434,7 +423,7 @@ impl Components {
 
         // ObsoletedRequired, ObsoletedRequiredByRenamed, PartlyObsoletedRequired, PartlyObsoletedRequiredByRenamed
         for p in &self.packages.clone() {
-            let package = p.borrow();
+            let package = get!(p);
 
             if !package.is_obsolete() {
                 continue;
@@ -467,13 +456,13 @@ fn check_obsoleted_required_packages(
     problem_type: fn(DependTypes, DependencyTypes, FMRI, String) -> Problem,
     problem_type_renamed: fn(DependTypes, DependencyTypes, FMRI) -> Problem,
 ) {
-    let mut check = |deps: &Vec<Rc<RefCell<Component>>>, dt: DependencyTypes| {
+    let mut check = |deps: &Vec<shared_type!(Component)>, dt: DependencyTypes| {
         for c in deps {
             components.problems.add_problem(problem_type(
                 DependTypes::Require(package.fmri.clone()),
                 dt.clone(),
                 FMRI::parse_raw("none").unwrap(),
-                c.borrow().name.clone(),
+                get!(c).name.clone(),
             ));
         }
     };
@@ -494,10 +483,7 @@ fn check_obsoleted_required_packages(
             Incorporate(_) => continue,
         };
 
-        let p = components
-            .get_package_by_fmri(&required_by_fmri)
-            .unwrap()
-            .borrow();
+        let p = get!(components.get_package_by_fmri(&required_by_fmri).unwrap());
         let o = p.is_obsolete();
         let r = p.is_renamed();
         drop(p);
@@ -526,12 +512,12 @@ fn check_obsoleted_required_packages(
 pub struct Component {
     pub(crate) name: String,
     /// contains no version
-    pub(crate) packages: Vec<Weak<RefCell<Package>>>,
+    pub(crate) packages: Vec<weak_type!(Package)>,
     /// dependencies
-    pub(crate) build: Vec<Weak<RefCell<Package>>>,
-    pub(crate) test: Vec<Weak<RefCell<Package>>>,
-    pub(crate) sys_build: Vec<Weak<RefCell<Package>>>,
-    pub(crate) sys_test: Vec<Weak<RefCell<Package>>>,
+    pub(crate) build: Vec<weak_type!(Package)>,
+    pub(crate) test: Vec<weak_type!(Package)>,
+    pub(crate) sys_build: Vec<weak_type!(Package)>,
+    pub(crate) sys_test: Vec<weak_type!(Package)>,
 }
 
 impl Component {
@@ -546,7 +532,7 @@ impl Component {
         }
     }
 
-    fn add_package(&mut self, package: Weak<RefCell<Package>>) {
+    fn add_package(&mut self, package: weak_type!(Package)) {
         self.packages.push(package)
     }
 
