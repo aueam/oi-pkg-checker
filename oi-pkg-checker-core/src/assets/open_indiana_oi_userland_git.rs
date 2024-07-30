@@ -10,6 +10,7 @@ use log::warn;
 
 use crate::{
     assets::catalogs_c::open_json_file,
+    get,
     packages::dependency_type::{
         DependencyTypes,
         DependencyTypes::{Build, Runtime, SystemBuild, SystemTest, Test},
@@ -111,9 +112,9 @@ pub fn load_git(components: &mut Components, oi_userland_components: &Path) -> R
     }
 
     for component in components.clone().get_components() {
-        let a = component.borrow();
+        let component = get!(component);
 
-        let history_file = format!("{}/{}/history", components_path, a.get_name());
+        let history_file = format!("{}/{}/history", components_path, component.get_name());
         let history_file_path = Path::new(&history_file);
 
         if !history_file_path.exists() {

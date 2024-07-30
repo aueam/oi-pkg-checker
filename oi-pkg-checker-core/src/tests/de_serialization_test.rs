@@ -1,13 +1,13 @@
-use std::{cell::RefCell, fs, rc::Rc};
+use std::fs;
 
-use fmri::{FMRI, Version};
+use fmri::{Version, FMRI};
 
 use crate::{
-    Component,
-    Components, DependTypes, packages::{
+    packages::{
         dependency_type::DependencyTypes,
         package::{Package, PackageVersion},
     },
+    Component, Components, DependTypes,
 };
 
 const PATH: &str = "/tmp/rust-oi-pkg-checker-core-de-serialization-test.bin";
@@ -49,8 +49,8 @@ fn new_valid_data() -> Components {
              versions: Vec<PackageVersion>,
              obsolete: bool,
              renamed: bool|
-     -> Rc<RefCell<Package>> {
-        Rc::new(RefCell::new(Package {
+     -> shared_type!(Package) {
+        new!(Package {
             fmri: f,
             versions,
             component: None,
@@ -61,7 +61,7 @@ fn new_valid_data() -> Components {
             test_dependents: vec![],
             sys_build_dependents: vec![],
             sys_test_dependents: vec![],
-        }))
+        })
     };
     let mut p1_v1 = PackageVersion::new(Version::new("1".to_owned()).unwrap());
     let mut p1_v2 = PackageVersion::new(Version::new("2".to_owned()).unwrap());
@@ -88,64 +88,70 @@ fn new_valid_data() -> Components {
     let p3 = p(p3_fmri.clone(), vec![p3_v1, p3_v2], false, false);
     let p4 = p(p4_fmri.clone(), vec![p4_v1, p4_v2], false, false);
     let mut components = Components::default();
-    components.packages.push(Rc::clone(&p1));
-    components.packages.push(Rc::clone(&p2));
-    components.packages.push(Rc::clone(&p3));
-    components.packages.push(Rc::clone(&p4));
+    components.packages.push(clone!(&p1));
+    components.packages.push(clone!(&p2));
+    components.packages.push(clone!(&p3));
+    components.packages.push(clone!(&p4));
     components
         .hash_packages
-        .insert(p1_fmri.clone().get_package_name_as_string(), Rc::clone(&p1));
+        .insert(p1_fmri.clone().get_package_name_as_string(), clone!(&p1));
     components
         .hash_packages
-        .insert(p2_fmri.clone().get_package_name_as_string(), Rc::clone(&p2));
+        .insert(p2_fmri.clone().get_package_name_as_string(), clone!(&p2));
     components
         .hash_packages
-        .insert(p3_fmri.clone().get_package_name_as_string(), Rc::clone(&p3));
+        .insert(p3_fmri.clone().get_package_name_as_string(), clone!(&p3));
     components
         .hash_packages
-        .insert(p4_fmri.clone().get_package_name_as_string(), Rc::clone(&p4));
+        .insert(p4_fmri.clone().get_package_name_as_string(), clone!(&p4));
 
     let c = |name: String,
-             packages: Vec<Rc<RefCell<Package>>>,
-             deps: Vec<Rc<RefCell<Package>>>|
-     -> Rc<RefCell<Component>> {
-        Rc::new(RefCell::new(Component {
+             packages: Vec<shared_type!(Package)>,
+             deps: Vec<shared_type!(Package)>|
+     -> shared_type!(Component) {
+        #[cfg(feature = "thread_safe")]
+        let f = std::sync::Arc::downgrade;
+        #[cfg(not(feature = "thread_safe"))]
+        let f = std::rc::Rc::downgrade;
+
+        new!(Component {
             name,
-            packages: packages.iter().map(Rc::downgrade).collect(),
-            build: deps.clone().iter().map(Rc::downgrade).collect(),
-            test: deps.clone().iter().map(Rc::downgrade).collect(),
-            sys_build: deps.clone().iter().map(Rc::downgrade).collect(),
-            sys_test: deps.clone().iter().map(Rc::downgrade).collect(),
-        }))
+            packages: packages.iter().map(f).collect(),
+            build: deps.clone().iter().map(f).collect(),
+            test: deps.clone().iter().map(f).collect(),
+            sys_build: deps.clone().iter().map(f).collect(),
+            sys_test: deps.clone().iter().map(f).collect(),
+        })
     };
 
     let c1 = c(
         "first/component".to_owned(),
-        vec![Rc::clone(&p1), Rc::clone(&p2)],
-        vec![Rc::clone(&p3), Rc::clone(&p4)],
+        vec![clone!(&p1), clone!(&p2)],
+        vec![clone!(&p3), clone!(&p4)],
     );
     let c2 = c(
         "second/component".to_owned(),
-        vec![Rc::clone(&p3), Rc::clone(&p4)],
-        vec![Rc::clone(&p1), Rc::clone(&p2)],
+        vec![clone!(&p3), clone!(&p4)],
+        vec![clone!(&p1), clone!(&p2)],
     );
-    components.components.push(Rc::clone(&c1));
-    components.components.push(Rc::clone(&c2));
+    components.components.push(clone!(&c1));
+    components.components.push(clone!(&c2));
     components
         .hash_components
-        .insert("first/component".to_owned(), Rc::clone(&c1));
+        .insert("first/component".to_owned(), clone!(&c1));
     components
         .hash_components
-        .insert("second/component".to_owned(), Rc::clone(&c2));
+        .insert("second/component".to_owned(), clone!(&c2));
 
-    let cp = |p: Rc<RefCell<Package>>, c: &Rc<RefCell<Component>>, d: &Rc<RefCell<Component>>| {
-        let mut p = p.borrow_mut();
-        p.component = Some(Rc::clone(c));
-        p.build_dependents = vec![Rc::clone(d)];
-        p.test_dependents = vec![Rc::clone(d)];
-        p.sys_build_dependents = vec![Rc::clone(d)];
-        p.sys_test_dependents = vec![Rc::clone(d)];
-    };
+    let cp =
+        |p: shared_type!(Package), c: &shared_type!(Component), d: &shared_type!(Component)| {
+            let mut p = get_mut!(p);
+            p.component = Some(clone!(c));
+            p.build_dependents = vec![clone!(d)];
+            p.test_dependents = vec![clone!(d)];
+            p.sys_build_dependents = vec![clone!(d)];
+            p.sys_test_dependents = vec![clone!(d)];
+        };
 
     cp(p1, &c1, &c2);
     cp(p2, &c1, &c2);

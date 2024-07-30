@@ -2,6 +2,7 @@ use packages::{components::Component, components::Components, depend_types::Depe
 pub use problems::{Problems, report};
 
 pub mod assets;
+#[macro_use]
 pub mod packages;
 pub mod problems;
 #[cfg(test)]
