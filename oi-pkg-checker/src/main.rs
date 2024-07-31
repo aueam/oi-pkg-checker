@@ -6,9 +6,8 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 use fmri::FMRI;
-use log::{debug, error, info, warn, LevelFilter};
+use log::{debug, error, info, LevelFilter, warn};
 
-use oi_pkg_checker_core::problems::report_problem;
 use oi_pkg_checker_core::{
     assets::{catalogs_c::load_catalog_c, open_indiana_oi_userland_git::load_git},
     packages::{
@@ -19,6 +18,7 @@ use oi_pkg_checker_core::{
     },
     report,
 };
+use oi_pkg_checker_core::problems::report_problem;
 
 use crate::{
     cli::{Args, Commands},
@@ -202,7 +202,6 @@ fn main() {
                 components.check_problems().unwrap();
 
                 components.problems.sort();
-                report(&components.problems);
 
                 components.serialize(data_path).unwrap();
             }
