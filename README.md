@@ -20,7 +20,7 @@ Just run `make`. It will download some assets and compile application.
 
 - Run the analysis
   with
-  `target/release/oi-pkg-checker run --catalog $(pwd)/assets/catalog.dependency.C --catalog $(pwd)/assets/catalog.encumbered.dependency.C`
+  `target/release/oi-pkg-checker run --catalog assets/catalog.dependency.C --catalog assets/catalog.encumbered.dependency.C`
     - Output is `data.bin`
 - Print problems with `target/release/oi-pkg-checker print-problems`
 
