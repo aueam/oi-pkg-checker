@@ -1,9 +1,11 @@
 use std::cmp::Ordering;
 
-use fmri::{Version, FMRI};
+use fmri::{FMRI, Version};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    Component,
+    DependTypes,
     get,
     packages::{
         dependency_type::{
@@ -11,9 +13,7 @@ use crate::{
             DependencyTypes::{Build, Runtime, SystemBuild, SystemTest, Test},
         },
         rev_depend_type::RevDependType,
-    },
-    problems::{Problem, Problem::PackageInMultipleComponents},
-    shared_type, Component, DependTypes,
+    }, problems::{Problem, Problem::PackageInMultipleComponents}, shared_type,
 };
 
 /// Package. Can hold multiple versions with different runtime dependencies.
@@ -154,6 +154,10 @@ impl Package {
 
     pub fn change_versions(&mut self, vers: Vec<PackageVersion>) {
         self.versions = vers
+    }
+
+    pub fn get_fmri(&self) -> &FMRI {
+        &self.fmri
     }
 }
 

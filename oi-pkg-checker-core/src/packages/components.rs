@@ -539,4 +539,20 @@ impl Component {
     pub fn get_name(&self) -> &String {
         &self.name
     }
+
+    pub fn get_build_dependencies(&self) -> &Vec<weak_type!(Package)> {
+        &self.build
+    }
+
+    pub fn get_sys_build_dependencies(&self) -> &Vec<weak_type!(Package)> {
+        &self.sys_build
+    }
+
+    pub fn get_test_dependencies(&self) -> &Vec<weak_type!(Package)> {
+        &self.test
+    }
+
+    pub fn get_sys_test_dependencies(&self) -> &Vec<weak_type!(Package)> {
+        &self.sys_test
+    }
 }
