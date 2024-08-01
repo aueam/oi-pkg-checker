@@ -1,14 +1,14 @@
 use std::{
+    cmp::Ordering,
     collections::{HashMap, HashSet},
     fmt::Debug,
 };
-use std::cmp::Ordering;
 
-use fmri::{FMRI, FMRIList};
+use fmri::{FMRIList, FMRI};
 
+use crate::problems::Problem::SamePackageHasTwoPublishers;
 use crate::{
-    clone, DependTypes, downgrade, get, get_mut,
-    new,
+    clone, downgrade, get, get_mut, new,
     packages::{
         dependency_type::{
             DependencyTypes,
@@ -25,9 +25,9 @@ use crate::{
             ObsoletedRequiredByRenamed, PartlyObsoletedRequired, PartlyObsoletedRequiredByRenamed,
             RenamedNeedsRenamed, RenamedPackageInComponent, UselessComponent,
         },
-    }, Problems, shared_type, weak_type,
+    },
+    shared_type, weak_type, DependTypes, Problems,
 };
-use crate::problems::Problem::SamePackageHasTwoPublishers;
 
 #[derive(Default, Clone, Debug)]
 pub struct Components {
@@ -412,7 +412,7 @@ impl Components {
         }
 
         // UselessComponent
-        for c in &*self.components {
+        'main: for c in &*self.components {
             let component = get!(c);
             if component.packages.iter().all(|p| {
                 let tmp = p.upgrade().unwrap();
@@ -441,6 +441,51 @@ impl Components {
             }) {
                 self.problems
                     .add_problem(UselessComponent(component.get_name().clone()));
+            } else {
+                let name = component.name.clone();
+                let packages_fmris = component
+                    .packages
+                    .iter()
+                    .map(|p| get!(p.upgrade().unwrap()).fmri.clone())
+                    .collect::<Vec<FMRI>>();
+
+                let packages = component.packages.clone();
+
+                drop(component);
+
+                for p in packages.iter().map(|a| a.upgrade().unwrap()) {
+                    let package = get!(p);
+
+                    for a in &package.runtime_dependents {
+                        match a {
+                            Require(f)
+                            | Optional(f)
+                            | RequireAny(f)
+                            | ConditionalFmri(f)
+                            | ConditionalPredicate(f)
+                            | Group(f) => {
+                                if !packages_fmris.contains(f) {
+                                    continue 'main;
+                                }
+                            }
+                            Incorporate(_) => {}
+                        }
+                    }
+
+                    let check = |deps: &Vec<shared_type!(Component)>| -> bool {
+                        !deps.iter().all(|c| name == get!(c).name)
+                    };
+
+                    if check(&package.build_dependents)
+                        || check(&package.sys_build_dependents)
+                        || check(&package.test_dependents)
+                        || check(&package.sys_test_dependents)
+                    {
+                        continue 'main;
+                    }
+                }
+
+                self.problems.add_problem(UselessComponent(name));
             }
         }
 
