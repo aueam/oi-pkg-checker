@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use fmri::FMRI;
+use fmri::{FMRI, Publisher};
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +14,7 @@ use crate::{
         UnRunnableMakeCommand, UselessComponent,
     },
 };
+use crate::problems::Problem::SamePackageHasTwoPublishers;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub enum Problem {
@@ -31,6 +32,7 @@ pub enum Problem {
     UselessComponent(String),
     PackageInMultipleComponents(FMRI, Vec<String>),
     NonExistingPackageInPkg5(FMRI, String),
+    SamePackageHasTwoPublishers(FMRI, Publisher, Publisher, Option<Publisher>),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -47,46 +49,29 @@ impl Problems {
 
     pub fn add_problem(&mut self, mut problem: Problem) {
         match &mut problem {
-            MissingComponentForPackage(fmri) => {
-                fmri.remove_publisher();
-                fmri.remove_version();
+            MissingComponentForPackage(f)
+            | NonExistingRequired(_, _, f, _)
+            | NonExistingRequiredByRenamed(_, _, f)
+            | ObsoletedRequired(_, _, f, _)
+            | ObsoletedRequiredByRenamed(_, _, f)
+            | PartlyObsoletedRequired(_, _, f, _)
+            | PartlyObsoletedRequiredByRenamed(_, _, f)
+            | RenamedPackageInComponent(f, _)
+            | ObsoletedPackageInComponent(f, _)
+            | PackageInMultipleComponents(f, _)
+            | NonExistingPackageInPkg5(f, _)
+            | SamePackageHasTwoPublishers(f, _, _, _) => {
+                f.remove_version();
+                f.remove_publisher();
             }
             RenamedNeedsRenamed(fmri_a, fmri_b) => {
                 fmri_a.remove_version();
                 fmri_b.remove_version();
-            }
-            RenamedPackageInComponent(fmri, _) => {
-                fmri.remove_version();
-            }
-            ObsoletedPackageInComponent(fmri, _) => {
-                fmri.remove_version();
+                fmri_a.remove_publisher();
+                fmri_b.remove_publisher();
             }
             UnRunnableMakeCommand(_, _) => {}
-            NonExistingRequired(_, _, required_by, _) => {
-                required_by.remove_version();
-            }
-            NonExistingRequiredByRenamed(_, _, required_by) => {
-                required_by.remove_version();
-            }
-            ObsoletedRequired(_, _, required_by, _) => {
-                required_by.remove_version();
-            }
-            ObsoletedRequiredByRenamed(_, _, required_by) => {
-                required_by.remove_version();
-            }
-            PartlyObsoletedRequired(_, _, required_by, _) => {
-                required_by.remove_version();
-            }
-            PartlyObsoletedRequiredByRenamed(_, _, required_by) => {
-                required_by.remove_version();
-            }
-            UselessComponent(_component_name) => {}
-            PackageInMultipleComponents(fmri, _) => {
-                fmri.remove_version();
-            }
-            NonExistingPackageInPkg5(fmri, _) => {
-                fmri.remove_version();
-            }
+            UselessComponent(_) => {}
         }
 
         if !self.contains(&problem) {
@@ -165,6 +150,7 @@ impl Problems {
                 UnRunnableMakeCommand(_, _) => 11,
                 PackageInMultipleComponents(_, _) => 12,
                 NonExistingPackageInPkg5(_, _) => 13,
+                SamePackageHasTwoPublishers(_, _, _, _) => 14,
             }
         };
 
@@ -172,7 +158,7 @@ impl Problems {
     }
 
     fn count(&self) {
-        let mut counter: [i16; 14] = [0; 14];
+        let mut counter: [i16; 15] = [0; 15];
         for problem in self.get_ref() {
             match problem {
                 UselessComponent(_) => counter[0] += 1,
@@ -189,6 +175,7 @@ impl Problems {
                 UnRunnableMakeCommand(_, _) => counter[11] += 1,
                 PackageInMultipleComponents(_, _) => counter[12] += 1,
                 NonExistingPackageInPkg5(_, _) => counter[13] += 1,
+                SamePackageHasTwoPublishers(_, _, _, _) => counter[14] += 1,
             }
         }
 
@@ -208,6 +195,7 @@ impl Problems {
                 11 => error!("Number of un-runnable make commands: {}", count),
                 12 => error!("Number of packages that are in multiple components: {}", count),
                 13 => error!("Number of packages that are in pkg5 file but do not exist: {}", count),
+                14 => error!("Number of problems with packages that have same publisher: {}", count),
                 _ => panic!("invalid problem type"),
             }
         }
@@ -220,6 +208,7 @@ impl Problems {
                 UselessComponent(_) => {}
                 UnRunnableMakeCommand(_, _) => {}
                 NonExistingPackageInPkg5(f, _)
+                | SamePackageHasTwoPublishers(f, _, _, _)
                 | PackageInMultipleComponents(f, _)
                 | MissingComponentForPackage(f)
                 | RenamedPackageInComponent(f, _)
@@ -294,6 +283,19 @@ pub fn report(problems: &Problems) {
 
 pub fn report_problem(problem: &Problem) {
     match problem {
+        SamePackageHasTwoPublishers(fmri, publisher_a, publisher_b, p) => {
+            if let Some(p) = p {
+                error!(
+                    "package {} has two publishers ({} and {}), but the latest version with publisher {} is not obsoleted",
+                    fmri, publisher_a, publisher_b, p
+                )
+            } else {
+                error!(
+                    "package {} has two publishers ({} and {}), but wrong package is obsoleted",
+                    fmri, publisher_a, publisher_b
+                )
+            }
+        }
         NonExistingPackageInPkg5(fmri, component_name) => {
             error!(
                 "package {} does not exist but it is in the pkg5, component: {}",

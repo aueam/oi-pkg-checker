@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
 };
+use std::cmp::Ordering;
 
 use fmri::{FMRI, FMRIList};
 
@@ -26,6 +27,7 @@ use crate::{
         },
     }, Problems, shared_type, weak_type,
 };
+use crate::problems::Problem::SamePackageHasTwoPublishers;
 
 #[derive(Default, Clone, Debug)]
 pub struct Components {
@@ -39,18 +41,95 @@ pub struct Components {
 }
 
 impl Components {
-    pub fn add_package(&mut self, package: Package) {
+    pub fn add_package(&mut self, mut package: Package) {
         let package_name = package.fmri.clone().get_package_name_as_string();
 
-        // if package.obsolete {
-        //     self.add_obsolete(fmri.clone())
-        // }
+        let mut existing_package = get_mut!(match self.get_package_by_fmri(&package.fmri) {
+            Ok(e) => e,
+            Err(_) => {
+                let rc_package = new!(package);
+                self.packages.push(clone!(&rc_package));
+                self.hash_packages.insert(package_name, rc_package);
+                return;
+            }
+        });
 
-        // TODO: set package obsolete?
+        let mut existing_package_versions = existing_package.get_versions().clone();
+        existing_package_versions.sort_by(|a, b| a.version.cmp(&b.version));
+        package.versions.sort_by(|a, b| a.version.cmp(&b.version));
 
-        let rc_package = new!(package);
-        self.packages.push(clone!(&rc_package));
-        self.hash_packages.insert(package_name, rc_package);
+        let o = existing_package_versions.first().unwrap();
+        let n = package.versions.first().unwrap();
+
+        match (o.is_obsolete(), n.is_obsolete()) {
+            (true, false) => {
+                match o.version.cmp(&n.version) {
+                    Ordering::Equal | Ordering::Less => {
+                        // everything is ok, old version is obsoleted, but we need to save new version
+
+                        *existing_package = package;
+                    }
+                    Ordering::Greater => {
+                        // this is problem, newer version is obsoleted, but older has to be obsoleted
+
+                        let p_a = existing_package.fmri.clone().get_publisher().unwrap();
+                        let p_b = package.fmri.clone().get_publisher().unwrap();
+
+                        drop(existing_package);
+
+                        self.problems.add_problem(SamePackageHasTwoPublishers(
+                            package.fmri.clone(),
+                            p_a.clone(),
+                            p_b.clone(),
+                            None,
+                        ));
+                    }
+                }
+            }
+            (false, true) => {
+                match o.version.cmp(&n.version) {
+                    Ordering::Equal | Ordering::Less => {
+                        // this is problem, newer version is obsoleted, but older has to be obsoleted
+
+                        let p_a = existing_package.fmri.clone().get_publisher().unwrap();
+                        let p_b = package.fmri.clone().get_publisher().unwrap();
+
+                        drop(existing_package);
+
+                        self.problems.add_problem(SamePackageHasTwoPublishers(
+                            package.fmri.clone(),
+                            p_a.clone(),
+                            p_b.clone(),
+                            None,
+                        ));
+                    }
+                    Ordering::Greater => {
+                        // everything is ok, old version is obsoleted
+                    }
+                }
+            }
+            (false, false) => {
+                // this is problem, one of them must be obsoleted
+
+                let p_a = existing_package.fmri.clone().get_publisher().unwrap();
+                let p_b = package.fmri.clone().get_publisher().unwrap();
+
+                drop(existing_package);
+
+                self.problems.add_problem(SamePackageHasTwoPublishers(
+                    package.fmri.clone(),
+                    p_a.clone(),
+                    p_b.clone(),
+                    Some(match o.version.cmp(&n.version) {
+                        Ordering::Equal => p_a,
+                        Ordering::Greater | Ordering::Less => p_b,
+                    }),
+                ));
+            }
+            (true, true) => {
+                // everything is ok, basically the whole package is obsoleted
+            }
+        }
     }
 
     pub fn new_component(
