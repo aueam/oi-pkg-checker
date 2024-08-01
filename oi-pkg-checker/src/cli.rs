@@ -12,15 +12,11 @@ pub struct Args {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Prints all problems and statistics
-    PrintProblems {
-        /// set debug on
-        #[arg(short, long, default_value = "false")]
-        debug: bool,
-    },
+    PrintProblems,
 
     /// Run analyze
     Run {
-        /// load catalogs (absolute paths)
+        /// load catalogs
         #[arg(long, value_name = "FILE")]
         catalog: Vec<PathBuf>,
 
@@ -29,17 +25,13 @@ pub enum Commands {
         debug: bool,
     },
 
-    /// Prints information about fmri and what packages need fmri.
+    /// Prints information about fmri and what packages need that fmri.
     CheckFMRI {
-        /// checking valid fmri
+        /// (valid) fmri
         fmri: String,
 
         /// hide renamed packages
         #[arg(long, default_value = "false")]
         hide_renamed: bool,
-
-        /// set debug on
-        #[arg(short, long, default_value = "false")]
-        debug: bool,
     },
 }

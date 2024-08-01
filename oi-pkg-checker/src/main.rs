@@ -6,8 +6,9 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 use fmri::FMRI;
-use log::{debug, error, info, LevelFilter, warn};
+use log::{debug, error, info, warn, LevelFilter};
 
+use oi_pkg_checker_core::problems::report_problem;
 use oi_pkg_checker_core::{
     assets::{catalogs_c::load_catalog_c, open_indiana_oi_userland_git::load_git},
     packages::{
@@ -18,7 +19,6 @@ use oi_pkg_checker_core::{
     },
     report,
 };
-use oi_pkg_checker_core::problems::report_problem;
 
 use crate::{
     cli::{Args, Commands},
@@ -39,17 +39,10 @@ fn main() {
 
     if let Some(subcommand) = Args::parse().command {
         match subcommand {
-            Commands::PrintProblems { debug } => {
-                debug_on(debug);
+            Commands::PrintProblems => {
                 report(&Components::deserialize(data_path).unwrap().problems);
             }
-            Commands::CheckFMRI {
-                fmri,
-                debug,
-                hide_renamed,
-            } => {
-                debug_on(debug);
-
+            Commands::CheckFMRI { fmri, hide_renamed } => {
                 let fmri = &FMRI::parse_raw(&fmri).unwrap();
 
                 info!("fmri: {}", fmri);
