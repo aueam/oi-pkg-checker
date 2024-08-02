@@ -1,5 +1,5 @@
 pub mod components;
-mod cycles;
+pub mod cycles;
 mod de_serialization;
 pub mod depend_types;
 pub mod dependency_type;
