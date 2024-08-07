@@ -33,5 +33,9 @@ pub enum Commands {
         /// hide renamed packages
         #[arg(long, default_value = "false")]
         hide_renamed: bool,
+
+        /// print lists in human-readable format
+        #[arg(short, long, default_value = "false")]
+        human_readable: bool,
     },
 }

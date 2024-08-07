@@ -6,9 +6,8 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 use fmri::FMRI;
-use log::{debug, error, info, warn, LevelFilter};
+use log::{debug, error, info, LevelFilter, warn};
 
-use oi_pkg_checker_core::problems::report_problem;
 use oi_pkg_checker_core::{
     assets::{catalogs_c::load_catalog_c, open_indiana_oi_userland_git::load_git},
     packages::{
@@ -19,6 +18,8 @@ use oi_pkg_checker_core::{
     },
     report,
 };
+use oi_pkg_checker_core::packages::cycles::format_cycle;
+use oi_pkg_checker_core::problems::report_problem;
 
 use crate::{
     cli::{Args, Commands},
@@ -40,9 +41,38 @@ fn main() {
     if let Some(subcommand) = Args::parse().command {
         match subcommand {
             Commands::PrintProblems => {
-                report(&Components::deserialize(data_path).unwrap().problems);
+                let components = Components::deserialize(data_path).unwrap();
+                report(&components.problems);
+
+                // use oi_pkg_checker_core::packages::cycles::EdgeType::*;
+                // let a = components.check_cycles(&[
+                //     RuntimeRequire,
+                //     RuntimeRequireAny,
+                //     RuntimeConditionalFmri,
+                //     Build,
+                //     SystemBuild,
+                //     Test,
+                //     SystemTest,
+                // ]);
+                //
+                // let mut h = true;
+                // for cycle in &a {
+                //     if h {
+                //         warn!("{}", format_cycle(cycle));
+                //         h = false;
+                //     } else {
+                //         error!("{}", format_cycle(cycle));
+                //         h = true;
+                //     }
+                // }
+                //
+                // println!("{:?}", a.len());
             }
-            Commands::CheckFMRI { fmri, hide_renamed } => {
+            Commands::CheckFMRI {
+                fmri,
+                hide_renamed,
+                human_readable,
+            } => {
                 let fmri = &FMRI::parse_raw(&fmri).unwrap();
 
                 info!("fmri: {}", fmri);
@@ -116,18 +146,27 @@ fn main() {
                         if !ds.is_empty() {
                             ds.sort();
                             ds.dedup();
-                            info!("  {}", label);
+
+                            if human_readable {
+                                info!("  {}", label);
+                            }
                             for d in ds {
-                                info!("    {}", d);
+                                if human_readable {
+                                    info!("    {}", d);
+                                } else {
+                                    info!(" RUNTIME: {}: {}", label, d);
+                                }
                             }
                         }
                     };
 
-                    info!("{}", "RUNTIME dependents:".bold());
+                    if human_readable {
+                        info!("{}", "RUNTIME dependents:".bold());
+                    }
                     process(require, "Require");
                     process(optional, "Optional");
                     process(incorporate, "Incorporate");
-                    process(require_any, "RequireAny");
+                    process(require_any, "Requir    eAny");
                     process(conditional_fmri, "Conditional (FMRI)");
                     process(conditional_predicate, "Conditional (Predicate)");
                     process(group, "Group");
@@ -136,7 +175,9 @@ fn main() {
                 let check_deps = |dt: DependencyTypes, label: &str| {
                     let build = package.get_git_dependents(dt).unwrap();
                     if !build.is_empty() {
-                        info!("{}", format!("{} (component/s) dependents:", label).bold());
+                        if human_readable {
+                            info!("{}", format!("{} (component/s) dependents:", label).bold());
+                        }
 
                         let mut deps = build
                             .iter()
@@ -146,7 +187,11 @@ fn main() {
                         deps.dedup();
 
                         for d in deps {
-                            info!("    {}", d)
+                            if human_readable {
+                                info!("    {}", d)
+                            } else {
+                                info!(" {}:  {}", label, d)
+                            }
                         }
                     }
                 };
