@@ -18,7 +18,6 @@ use oi_pkg_checker_core::{
     },
     report,
 };
-use oi_pkg_checker_core::packages::cycles::format_cycle;
 use oi_pkg_checker_core::problems::report_problem;
 
 use crate::{
@@ -41,32 +40,7 @@ fn main() {
     if let Some(subcommand) = Args::parse().command {
         match subcommand {
             Commands::PrintProblems => {
-                let components = Components::deserialize(data_path).unwrap();
-                report(&components.problems);
-
-                // use oi_pkg_checker_core::packages::cycles::EdgeType::*;
-                // let a = components.check_cycles(&[
-                //     RuntimeRequire,
-                //     RuntimeRequireAny,
-                //     RuntimeConditionalFmri,
-                //     Build,
-                //     SystemBuild,
-                //     Test,
-                //     SystemTest,
-                // ]);
-                //
-                // let mut h = true;
-                // for cycle in &a {
-                //     if h {
-                //         warn!("{}", format_cycle(cycle));
-                //         h = false;
-                //     } else {
-                //         error!("{}", format_cycle(cycle));
-                //         h = true;
-                //     }
-                // }
-                //
-                // println!("{:?}", a.len());
+                report(&Components::deserialize(data_path).unwrap().problems)
             }
             Commands::CheckFMRI {
                 fmri,

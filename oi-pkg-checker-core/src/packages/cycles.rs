@@ -34,12 +34,8 @@ impl Components {
         let mut cycles: Vec<Vec<(FMRI, EdgeType)>> = Vec::new();
         let mut visited: Vec<FMRI> = Vec::new();
 
-        let a = self.packages.len();
-
-        for (i, p) in self.packages.iter().enumerate() {
+        for p in &self.packages {
             let package = get!(p).clone();
-
-            println!("{}/{}", i, a);
 
             if visited.contains(package.get_fmri()) {
                 continue;
