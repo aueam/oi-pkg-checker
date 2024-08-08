@@ -178,8 +178,6 @@ fn main() {
                 if let Some(c) = package.is_in_component() {
                     let component = c.borrow();
                     info!("component name: {}", component.get_name());
-                } else {
-                    warn!("missing component for package");
                 }
 
                 let problems = components.problems.get_problems_related_to_fmri(fmri);
