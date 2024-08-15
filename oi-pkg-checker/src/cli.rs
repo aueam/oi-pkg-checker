@@ -11,10 +11,6 @@ pub struct Args {
     /// path to data.bin
     #[arg(long, value_name = "FILE")]
     pub data: PathBuf,
-
-    /// path to oi-userland/components
-    #[arg(long, value_name = "FILE")]
-    pub components: PathBuf,
 }
 
 #[derive(Subcommand)]
@@ -31,6 +27,10 @@ pub enum Commands {
         /// set debug on
         #[arg(short, long, default_value = "false")]
         debug: bool,
+
+        /// path to oi-userland/components
+        #[arg(long, value_name = "FILE")]
+        components: PathBuf,
     },
 
     /// Prints information about fmri and what packages need that fmri.

@@ -200,7 +200,11 @@ fn main() {
                     }
                 }
             }
-            Commands::Run { catalog, debug } => {
+            Commands::Run {
+                catalog,
+                debug,
+                components: components_path,
+            } => {
                 debug_on(debug);
 
                 let mut components = Components::default();
@@ -216,7 +220,7 @@ fn main() {
                     });
                 }
 
-                match load_git(&mut components, &args.components) {
+                match load_git(&mut components, &components_path) {
                     Ok(_) => {}
                     Err(e) => {
                         error!("failed to load git: {}", e);
