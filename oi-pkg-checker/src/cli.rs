@@ -7,6 +7,14 @@ use clap::{Parser, Subcommand};
 pub struct Args {
     #[command(subcommand)]
     pub command: Option<Commands>,
+
+    /// path to data.bin
+    #[arg(long, value_name = "FILE")]
+    pub data: PathBuf,
+
+    /// path to oi-userland/components
+    #[arg(long, value_name = "FILE")]
+    pub components: PathBuf,
 }
 
 #[derive(Subcommand)]
@@ -16,7 +24,7 @@ pub enum Commands {
 
     /// Run analyze
     Run {
-        /// load catalogs
+        /// catalog path
         #[arg(long, value_name = "FILE")]
         catalog: Vec<PathBuf>,
 

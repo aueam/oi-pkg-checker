@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    process::exit,
-};
+use std::{path::Path, process::exit};
 
 use clap::Parser;
 use colored::Colorize;
@@ -34,19 +31,17 @@ fn main() {
     log::set_logger(&LOGGER).unwrap();
     log::set_max_level(LevelFilter::Info);
 
-    let data_path = "data.bin";
-    let components_path = PathBuf::from("assets/oi-userland/components");
-
-    if let Some(subcommand) = Args::parse().command {
+    let args = Args::parse();
+    if let Some(subcommand) = args.command {
         match subcommand {
             Commands::PrintProblems => {
-                if !Path::new(data_path).exists() {
-                    error!("{} doesn't exist", data_path);
+                if !Path::new(&args.data).exists() {
+                    error!("{} doesn't exist", args.data.display());
                     exit(1);
                 }
 
                 report(
-                    &Components::deserialize(data_path)
+                    &Components::deserialize(&format!("{}", args.data.display()))
                         .unwrap_or_else(|e| {
                             error!("Failed to deserialize into components: {}", e);
                             exit(1);
@@ -66,15 +61,16 @@ fn main() {
 
                 info!("fmri: {}", fmri);
 
-                if !Path::new(data_path).exists() {
-                    error!("{} doesn't exist", data_path);
+                if !Path::new(&args.data).exists() {
+                    error!("{} doesn't exist", args.data.display());
                     exit(1);
                 }
 
-                let components = Components::deserialize(data_path).unwrap_or_else(|e| {
-                    error!("Failed to deserialize into components: {}", e);
-                    exit(1);
-                });
+                let components = Components::deserialize(&format!("{}", args.data.display()))
+                    .unwrap_or_else(|e| {
+                        error!("Failed to deserialize into components: {}", e);
+                        exit(1);
+                    });
 
                 let package = components
                     .get_package_by_fmri(fmri)
@@ -220,7 +216,7 @@ fn main() {
                     });
                 }
 
-                match load_git(&mut components, &components_path) {
+                match load_git(&mut components, &args.components) {
                     Ok(_) => {}
                     Err(e) => {
                         error!("failed to load git: {}", e);
@@ -235,10 +231,12 @@ fn main() {
 
                 components.problems.sort();
 
-                components.serialize(data_path).unwrap_or_else(|e| {
-                    error!("Failed to serialize into data: {}", e);
-                    exit(1);
-                });
+                components
+                    .serialize(&format!("{}", args.data.display()))
+                    .unwrap_or_else(|e| {
+                        error!("Failed to serialize into data: {}", e);
+                        exit(1);
+                    });
             }
         }
     }
