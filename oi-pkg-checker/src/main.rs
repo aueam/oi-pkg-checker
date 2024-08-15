@@ -6,8 +6,9 @@ use std::{
 use clap::Parser;
 use colored::Colorize;
 use fmri::FMRI;
-use log::{debug, error, info, LevelFilter, warn};
+use log::{debug, error, info, warn, LevelFilter};
 
+use oi_pkg_checker_core::problems::report_problem;
 use oi_pkg_checker_core::{
     assets::{catalogs_c::load_catalog_c, open_indiana_oi_userland_git::load_git},
     packages::{
@@ -18,7 +19,6 @@ use oi_pkg_checker_core::{
     },
     report,
 };
-use oi_pkg_checker_core::problems::report_problem;
 
 use crate::{
     cli::{Args, Commands},
@@ -40,33 +40,49 @@ fn main() {
     if let Some(subcommand) = Args::parse().command {
         match subcommand {
             Commands::PrintProblems => {
-                report(&Components::deserialize(data_path).unwrap().problems)
+                if !Path::new(data_path).exists() {
+                    error!("{} doesn't exist", data_path);
+                    exit(1);
+                }
+
+                report(
+                    &Components::deserialize(data_path)
+                        .unwrap_or_else(|e| {
+                            error!("Failed to deserialize into components: {}", e);
+                            exit(1);
+                        })
+                        .problems,
+                )
             }
             Commands::CheckFMRI {
                 fmri,
                 hide_renamed,
                 human_readable,
             } => {
-                let fmri = &FMRI::parse_raw(&fmri).unwrap();
+                let fmri = &FMRI::parse_raw(&fmri).unwrap_or_else(|e| {
+                    error!("Failed to parse fmri: {}", e);
+                    exit(1);
+                });
 
                 info!("fmri: {}", fmri);
 
-                let components = match Path::new(data_path).exists() {
-                    false => {
-                        error!("{} doesn't exist", data_path);
-                        exit(1);
-                    }
-                    _ => Components::deserialize(data_path).unwrap(),
-                };
-
-                let package = match components.get_package_by_fmri(fmri) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        error!("{}", e);
-                        exit(1);
-                    }
+                if !Path::new(data_path).exists() {
+                    error!("{} doesn't exist", data_path);
+                    exit(1);
                 }
-                .borrow();
+
+                let components = Components::deserialize(data_path).unwrap_or_else(|e| {
+                    error!("Failed to deserialize into components: {}", e);
+                    exit(1);
+                });
+
+                let package = components
+                    .get_package_by_fmri(fmri)
+                    .unwrap_or_else(|e| {
+                        error!("Failed to get package with fmri ({}): {}", fmri, e);
+                        exit(1);
+                    })
+                    .borrow();
 
                 if package.is_obsolete() {
                     info!("package is obsolete");
@@ -198,22 +214,31 @@ fn main() {
                 }
 
                 for path in catalog {
-                    load_catalog_c(&mut components, &path).unwrap();
+                    load_catalog_c(&mut components, &path).unwrap_or_else(|e| {
+                        error!("Failed to load catalog: ({}): {}", path.display(), e);
+                        exit(1);
+                    });
                 }
 
                 match load_git(&mut components, &components_path) {
                     Ok(_) => {}
                     Err(e) => {
                         error!("failed to load git: {}", e);
-                        exit(0);
+                        exit(1);
                     }
                 };
 
-                components.check_problems().unwrap();
+                components.check_problems().unwrap_or_else(|e| {
+                    error!("Failed to check other problems: {}", e);
+                    exit(1);
+                });
 
                 components.problems.sort();
 
-                components.serialize(data_path).unwrap();
+                components.serialize(data_path).unwrap_or_else(|e| {
+                    error!("Failed to serialize into data: {}", e);
+                    exit(1);
+                });
             }
         }
     }
